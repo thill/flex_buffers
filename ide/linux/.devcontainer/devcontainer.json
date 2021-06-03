@@ -1,0 +1,22 @@
+{
+	"name": "flex_buffers",
+	"build": {
+		"dockerfile": "Dockerfile"
+	},
+	"settings": {
+		"terminal.integrated.shell.linux": "/bin/bash"
+	},
+	"extensions": [
+		"ms-azuretools.vscode-docker",
+		"ms-vscode.cpptools",
+		"vscjava.vscode-java-pack"
+	],
+	"workspaceMount": "",
+	"workspaceFolder": "/workspaces/flex_buffers",
+	"runArgs": [
+		"--volume=${localWorkspaceFolder}/../../:/workspaces/flex_buffers",
+		"--cap-add=SYS_PTRACE",
+		"--security-opt",
+		"seccomp=unconfined"
+	]
+}
