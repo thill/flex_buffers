@@ -2,6 +2,11 @@
 Safe, flexible buffers for modern C++.
 
 
+## Include
+Flex Buffers are provided in a single header file at `flexbuf/flexbuf.h`.
+Bazel users can utilize `//:flexbuf` from the root `BUILD` file.
+
+
 ## Class Overview
 * `BufferView` - A const-only, fixed-length buffer that wraps existing memory. Pass-by-value continues to point to the same underlying memory.
 * `Buffer` - A mutable, fixed-length buffer that can either allocate memory or wrap existing memory. Pass-by-value will deep copy. Extends `BufferView`.
@@ -310,3 +315,15 @@ Member Functions:
 Member Operators:
 * `BufferWriter& operator<<(const BufferView& buffer)` - Write the given buffer at the current position, advancing the position by given buffer's size.
 * `BufferWriter& operator<<(const std::string_view& string)` - Write the given string at the current position, advancing the position by the given string's size.
+
+
+## Developing
+For containerized development with VS Code IDE:
+* `ide/linux-amd64` for Linux, WSL, and MacOS on x86_64
+* `ide/selinux-amd64` for Security-Enhanded Linux
+
+```
+$ code ./ide/linux-amd64
+```
+
+Then follow the "Reopen in container" prompts.
