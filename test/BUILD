@@ -3,15 +3,15 @@ load("//bazel:cc_opts.bzl", "default_copts")
 
 cc_library(
     name = "tests",
+    testonly = True,
     srcs = glob(["**/*.cc"]),
     hdrs = glob(["**/*.h"]),
-    visibility = ["//visibility:private"],
     copts = default_copts(),
-    testonly = True,
+    visibility = ["//visibility:private"],
     deps = [
-        "@com_github_catchorg_catch2//:lib",
         "//:flexbuf",
-    ]
+        "@com_github_catchorg_catch2//:lib",
+    ],
 )
 
 cc_test(
