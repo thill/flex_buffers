@@ -27,8 +27,9 @@ Factory Functions:
 
 Member Functions:
 * `const char* data()` - Get the raw pointer to the start of the wrapped data.
+* `T read<T>(size_t index)` - Return a copy of any fundamental type from the given index.
 * `size_t size()` - Get the buffer size.
-* `BufferView view(size_t index = 0, size_t size = BufferView::npos)` - Get a sub-view of this buffer.
+* `BufferView subview(size_t index = 0, size_t size = BufferView::npos)` - Get a sub-view of this buffer.
 
 Member Operators:
 * `const char& operator[](size_t index)` - Get the byte at the given index.
@@ -84,7 +85,7 @@ Example:
 std::string src{"hello world!"};
 auto buffer_view = BufferView::wrap(src);
 // create a subview from `index=6` of `size=5`
-auto child_view = buffer_view.view(6, 5);
+auto child_view = buffer_view.subview(6, 5);
 // stringification of child view
 std::cout << "child_view.str(): " << child_view.str() << std::endl;
 // raw pointer points directly to the beginning of the child view
@@ -95,6 +96,21 @@ Output:
 ```
 child_view.str(): world
 child_view_raw[0]: w
+```
+
+
+### Reading Fundamental Types
+Example:
+```
+char* src = new char[2];
+src[0] = 1;
+src[1] = 1;
+auto buf = BufferView::wrap(src, 0, 2);
+std::cout << buf.read<uint16_t>(0) << std::endl;
+```
+Output:
+```
+257
 ```
 
 
@@ -116,9 +132,10 @@ Member Functions:
 * `void clear()` - Fill the data with 0's
 * `Buffer copy(size_t index = 0, size_t size = Buffer::npos)` - Allocate a new Buffer consisting of the contents of this buffer for the given range.
 * `char* data()` - Get the raw pointer to the start of the wrapped data.
-* `Buffer span(size_t index = 0, size_t size = Buffer::npos)` - Get a mutable buffer that wraps the same underlying data for the given range.
 * `size_t size()` - Get the buffer size.
-* `BufferView view(size_t index = 0, size_t size = BufferView::npos)` - Get a sub-view of this buffer.
+* `Buffer subspan(size_t index = 0, size_t size = Buffer::npos)` - Get a mutable buffer that wraps the same underlying data for the given range.
+* `BufferView subview(size_t index = 0, size_t size = BufferView::npos)` - Get a sub-view of this buffer.
+* `void write<T>(const T& src, size_t index = 0)` - Write any fundamental type to the given index.
 
 Member Operators:
 * `char& operator[](size_t index)` - Get the byte at the given index.
@@ -158,8 +175,8 @@ Example:
 ```
 std::string str{"hello world!"};
 auto buf = Buffer::copy_of(str);
-auto span1 = buf.span(0, 6); // span from index 0 of size 6
-auto span2 = buf.span(6); // span from index 6 to end of buffer
+auto span1 = buf.subspan(0, 6); // span from index 0 of size 6
+auto span2 = buf.subspan(6); // span from index 6 to end of buffer
 span1[0] = 'H';
 span2[0] = 'W';
 std::cout << buf.str() << std::endl;
@@ -169,6 +186,19 @@ Output:
 Hello World!
 ```
 Note: Parent and child views use a `shared_ptr` to manage underlying buffer ownership, so it is a completely valid for a child view to outlive the parent view. (Beware wrapping user-provided raw pointers, as they must remain valid as long as any parent or child view continues to use it! Consider using `shared_ptr<const char[]>` when possible.)
+
+
+### Writing Fundamental Types
+Example:
+```
+auto buf = Buffer::allocate(4);
+buf.write<uint32_t>(12345, 0);
+std::cout << buf.read<uint32_t>(0) << std::endl;
+```
+Output:
+```
+12345
+```
 
 
 ## FlexBuffer
@@ -192,14 +222,15 @@ Member Functions:
 * `size_t initial_capacity()` - Get the initial capacity. The underlying memory will never reallocate smaller than this size.
 * `Buffer reserve(size_t size)` - Increment the total size by the given size, and return a writable Buffer that wraps this new memory.
 * `void resize(size_t size, ResizeMode mode = ResizeMode::KeepData)` - Set the current size, and grow or shrink the underlying memory by factors of two as necessary.
-* `Buffer span(size_t index = 0, size_t size = Buffer::npos)` - Get a mutable buffer that wraps the same underlying data for the given range.
 * `size_t size()` - Get the buffer size.
-* `BufferView view(size_t index = 0, size_t size = BufferView::npos)` - Get a sub-view of this buffer.
+* `Buffer subspan(size_t index = 0, size_t size = Buffer::npos)` - Get a mutable buffer that wraps the same underlying data for the given range.
+* `BufferView subview(size_t index = 0, size_t size = BufferView::npos)` - Get a sub-view of this buffer.
 
 Member Operators:
 * `char& operator[](size_t index)` - Get the byte at the given index.
 * `FlexBuffer& operator<<(const BufferView& buffer)` - Append the given buffer to the end of this FlexBuffer, growing by the given buffer's size.
 * `FlexBuffer& operator<<(const std::string_view& string)` - Append the given string to the end of this FlexBuffer, growing by the given string's size.
+* `FlexBuffer& operator<< <T>(const T& value)` - Append any fundamental type to the end of this FlexBuffer, growing by the given type's size.
 
 Stringification Functions:
 * `std::string FlexBuffer::str()` - Convert the contents to a std::string
@@ -290,8 +321,10 @@ Constructors:
 * `BufferReader(const BufferView& view)`
 
 Member Functions:
-* `BufferView next(size_t size)` - Get a BufferView of the next `size` elements and advance the `position`
-* `BufferView peek(size_t size)` - Get a BufferView of the next `size` elements without advancing the `position`
+* `BufferView next(size_t size)` - Get a BufferView of the next `size` bytes and advance the `position`
+* `T next<T>()` - Read a fundamental type and advance the `position` by the size of the type
+* `BufferView peek(size_t size)` - Get a BufferView of the next `size` bytes without advancing the `position`
+* `T peek<T>()` - Read a fundamental type without advancing the `position`
 * `size_t position()` - Get the current position
 * `void position(size_t position)` - Set the current position
 * `size_t remaining()` - Get the remaining bytes that can be read (`view.size() - position()`)
@@ -315,6 +348,7 @@ Member Functions:
 Member Operators:
 * `BufferWriter& operator<<(const BufferView& buffer)` - Write the given buffer at the current position, advancing the position by given buffer's size.
 * `BufferWriter& operator<<(const std::string_view& string)` - Write the given string at the current position, advancing the position by the given string's size.
+* `FlexBuffer& operator<< <T>(const T& value)` - Write the given fundamental type's value at the current position, advancing the offset by the given type's size.
 
 
 ## Developing

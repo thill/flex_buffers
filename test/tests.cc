@@ -19,7 +19,7 @@ TEST_CASE("BufferView::wrap(shared_ptr<char[]>)") {
 TEST_CASE("BufferView(const BufferView&) shallow") {
   std::string str{"hello world!"};
   auto src = Buffer::copy_of(str);
-  BufferView buf = src.view();
+  BufferView buf = src.subview();
   BufferView copy{buf};
   src[0] = 'H';
   src[6] = 'W';
@@ -31,7 +31,7 @@ TEST_CASE("BufferView(const BufferView&) shallow") {
 TEST_CASE("BufferView operator=(const BufferView&) shallow") {
   std::string str{"hello world!"};
   auto src = Buffer::copy_of(str);
-  BufferView buf = src.view();
+  BufferView buf = src.subview();
   BufferView copy;
   copy = buf;
   src[0] = 'H';
@@ -80,17 +80,26 @@ TEST_CASE("BufferView.operator[]") {
   delete[] src;
 }
 
-TEST_CASE("BufferView.view()") {
+TEST_CASE("BufferView.read<>()") {
+  char* src = new char[3];
+  src[0] = 255;
+  src[1] = 1;
+  src[2] = 1;
+  auto buf = BufferView::wrap(src, 0, 3);
+  REQUIRE(buf.read<uint16_t>(1) == static_cast<uint16_t>(257));
+}
+
+TEST_CASE("BufferView.subview()") {
   std::string src{"hello world!"};
   auto buf = BufferView::wrap(src);
-  auto view = buf.view(6);
+  auto view = buf.subview(6);
   REQUIRE(view.str() == "world!");
 }
 
-TEST_CASE("BufferView.view() does not dangle") {
+TEST_CASE("BufferView.subview() does not dangle") {
   std::string src{"hello world!"};
   auto buf = std::make_shared<BufferView>(BufferView::wrap(src));
-  auto view = buf->view(6);
+  auto view = buf->subview(6);
   buf.reset();
   REQUIRE(view.str() == "world!");
 }
@@ -205,11 +214,17 @@ TEST_CASE("Buffer.operator[](index)") {
   REQUIRE(buf[11] == '!');
 }
 
-TEST_CASE("Buffer.span() shallow") {
+TEST_CASE("BufferView.write<>()") {
+  auto buf = Buffer::allocate(4);
+  buf.write<uint32_t>(12345, 0);
+  REQUIRE(buf.read<uint32_t>(0) == 12345);
+}
+
+TEST_CASE("Buffer.subspan() shallow") {
   std::string str{"hello world!"};
   auto buf = Buffer::copy_of(str);
-  auto span1 = buf.span();
-  auto span2 = buf.span(6);
+  auto span1 = buf.subspan();
+  auto span2 = buf.subspan(6);
   buf[0] = 'H';
   REQUIRE(buf.str() == "Hello world!");
   REQUIRE(span1.str() == "Hello world!");
@@ -274,10 +289,10 @@ TEST_CASE("FlexBuffer operator=(const FlexBuffer&) deep") {
   REQUIRE(copy.str() == "hello World!");
 }
 
-TEST_CASE("FlexBuffer.view() does not dangle") {
+TEST_CASE("FlexBuffer.subview() does not dangle") {
   auto buf = std::make_shared<FlexBuffer>();
   *buf << "hello world!";
-  auto view = buf->view(6);
+  auto view = buf->subview(6);
   buf.reset();
   REQUIRE(view.str() == "world!");
 }
@@ -362,7 +377,7 @@ TEST_CASE("FlexBuffer.resize(grow, KeepData)") {
   buf << "hello world!";
   buf.resize(100);
   REQUIRE(buf.size() == 100);
-  REQUIRE(buf.view(0, 12).str() == "hello world!");
+  REQUIRE(buf.subview(0, 12).str() == "hello world!");
 }
 
 TEST_CASE("FlexBuffer.resize(grow, IgnoreData)") {
@@ -370,7 +385,7 @@ TEST_CASE("FlexBuffer.resize(grow, IgnoreData)") {
   buf << "hello world!";
   buf.resize(100, ResizeMode::IgnoreData);
   REQUIRE(buf.size() == 100);
-  REQUIRE(buf.view(0, 12).str() != "hello world!");
+  REQUIRE(buf.subview(0, 12).str() != "hello world!");
 }
 
 TEST_CASE("FlexBuffer.reserve(size)") {
@@ -426,6 +441,13 @@ TEST_CASE("FlexBuffer << FlexBuffer") {
   REQUIRE(dest.str() == "hello world! hello world!");
 }
 
+TEST_CASE("FlexBuffer << uint32_t") {
+  FlexBuffer buf;
+  buf << static_cast<uint32_t>(123456789);
+  auto read = buf.read<uint32_t>(0);
+  REQUIRE(read == 123456789);
+}
+
 TEST_CASE("BufferWriter and BufferReader") {
   auto buf = Buffer::allocate(12);
   BufferWriter writer{buf};
@@ -440,14 +462,27 @@ TEST_CASE("BufferWriter and BufferReader") {
   REQUIRE(writer.remaining() == 0);
   BufferReader reader{buf};
   REQUIRE(reader.remaining() == 12);
+  auto peek = reader.peek(6);
   auto view1 = reader.next(6);
   REQUIRE(reader.remaining() == 6);
   auto view2 = reader.next(6);
   REQUIRE(reader.remaining() == 0);
+  REQUIRE(peek.str() == "hello ");
   REQUIRE(view1.str() == "hello ");
   REQUIRE(view2.str() == "world!");
   REQUIRE_THROWS(reader.next(1), "array index out of bounds");
   REQUIRE(reader.remaining() == 0);
+}
+
+TEST_CASE("BufferWriter and BufferReader fundamental types") {
+  auto buf = Buffer::allocate(8);
+  BufferWriter writer{buf};
+  writer << static_cast<uint32_t>(1234);
+  writer << static_cast<uint32_t>(5678);
+  BufferReader reader{buf};
+  REQUIRE(reader.next<uint32_t>() == 1234);
+  REQUIRE(reader.peek<uint32_t>() == 5678);
+  REQUIRE(reader.next<uint32_t>() == 5678);
 }
 
 TEST_CASE("FlexBuffer.data() const") {

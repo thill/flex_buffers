@@ -1,3 +1,5 @@
+#pragma once
+
 #include <compare>
 #include <cstddef>
 #include <cstring>
@@ -5,6 +7,7 @@
 #include <ostream>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 
 namespace flexbuf {
 
@@ -189,11 +192,22 @@ public:
   }
 
   /**
+   * Return a copy of any fundamental type from the given index.
+   */
+  template <typename T, typename = std::enable_if_t<std::is_fundamental_v<T>>>
+  const T read(size_t index) const {
+    check_bounds(index, sizeof(T));
+    T v;
+    memcpy(&v, reinterpret_cast<const char*>(raw_data() + index), sizeof(T));
+    return v;
+  }
+
+  /**
    * Get a sub-view of this buffer.
    * Throws on array index out of bounds.
    * The returned buffer may outlive the source buffer.
    */
-  BufferView view(size_t index = 0, size_t size = BufferView::npos) {
+  BufferView subview(size_t index = 0, size_t size = BufferView::npos) {
     if (size == BufferView::npos)
       size = _size - index;
     check_bounds(index, size);
@@ -205,8 +219,8 @@ public:
    * Throws on array index out of bounds.
    * The returned buffer may outlive the source buffer.
    */
-  const BufferView view(size_t index = 0, size_t size = BufferView::npos) const {
-    return const_cast<BufferView&>(*this).view(index, size);
+  const BufferView subview(size_t index = 0, size_t size = BufferView::npos) const {
+    return const_cast<BufferView&>(*this).subview(index, size);
   }
 
   /**
@@ -348,10 +362,19 @@ public:
   }
 
   /**
+   * Write any trivially copyable type to the given index.
+   */
+  template <typename T, typename = std::enable_if_t<std::is_trivially_copyable_v<T>>>
+  void write(const T& src, size_t index = 0) {
+    check_bounds(index, sizeof(T));
+    memcpy(reinterpret_cast<char*>(raw_data() + index), &src, sizeof(T));
+  }
+
+  /**
    * Get a mutable buffer that wraps the same underlying data for the given range.
    * The returned buffer may outlive the source buffer.
    */
-  Buffer span(size_t index = 0, size_t size = Buffer::npos) {
+  Buffer subspan(size_t index = 0, size_t size = Buffer::npos) {
     if (size == Buffer::npos)
       size = _size - index;
     check_bounds(index, size);
@@ -362,8 +385,8 @@ public:
    * Get a const buffer that wraps the same underlying data for the given range.
    * The returned buffer may outlive the source buffer.
    */
-  const Buffer span(size_t index = 0, size_t size = Buffer::npos) const {
-    return const_cast<Buffer&>(*this).span(index, size);
+  const Buffer subspan(size_t index = 0, size_t size = Buffer::npos) const {
+    return const_cast<Buffer&>(*this).subspan(index, size);
   }
 
   /**
@@ -533,6 +556,16 @@ public:
     return append(string.data(), 0, string.size());
   }
 
+  /**
+   * Append any fundamental type to the end of this FlexBuffer, growing by the given type's size.
+   */
+  template <typename T, typename = typename std::enable_if_t<std::is_fundamental_v<T>>>
+  FlexBuffer& operator<<(const T& src) {
+    auto dest = reserve(sizeof(T));
+    memcpy(dest.data(), &src, sizeof(T));
+    return *this;
+  }
+
 private:
   inline FlexBuffer& append(const char* src, size_t offset, size_t size) noexcept {
     auto dest = reserve(size);
@@ -580,7 +613,16 @@ public:
    * After creating the view, this Reader's position remains unchanged.
    */
   const BufferView peek(size_t size) const {
-    return _view.view(_position, size);
+    return _view.subview(_position, size);
+  }
+
+  /**
+   * Get a copy of any fundemental type from the underlying BufferView from the current position.
+   * After reading the value, this Reader's position remains unchanged.
+   */
+  template <typename T, typename = typename std::enable_if_t<std::is_fundamental_v<T>>>
+  T peek() const {
+    return _view.read<T>(_position);
   }
 
   /**
@@ -588,8 +630,19 @@ public:
    * After creating the view, this Reader's position is advanced by the size.
    */
   const BufferView next(size_t size) {
-    BufferView result = _view.view(_position, size);
+    BufferView result = _view.subview(_position, size);
     _position += size;
+    return result;
+  }
+
+  /**
+   * Get a copy of any fundemental type from the underlying BufferView from the current position.
+   * After reading the value, this Reader's position is advanced by the size.
+   */
+  template <typename T, typename = typename std::enable_if_t<std::is_fundamental_v<T>>>
+  T next() {
+    auto result = _view.read<T>(_position);
+    _position += sizeof(T);
     return result;
   }
 };
@@ -635,7 +688,7 @@ public:
    * After creating the span, this Reader's position remains unchanged.
    */
   Buffer peek(size_t size) {
-    return _buf.span(_position, size);
+    return _buf.subspan(_position, size);
   }
 
   /**
@@ -643,7 +696,7 @@ public:
    * After creating the span, this Reader's position is advanced by the size.
    */
   Buffer next(size_t size) {
-    Buffer result = _buf.span(_position, size);
+    Buffer result = _buf.subspan(_position, size);
     _position += size;
     return result;
   }
@@ -660,6 +713,18 @@ public:
    */
   BufferWriter& operator<<(const std::string_view& string) {
     return write(string.data(), 0, string.size());
+  }
+
+  /**
+   * Write the given fundamental type's value at the current position, advancing the offset by the given type's size.
+   */
+  template <typename T, typename = typename std::enable_if_t<std::is_fundamental_v<T>>>
+  BufferWriter& operator<<(const T& src) {
+    if (_position + sizeof(T) > _buf.size())
+      throw std::runtime_error{"array index out of bounds"};
+    memcpy(reinterpret_cast<char*>(_buf.data() + _position), &src, sizeof(T));
+    _position += sizeof(T);
+    return *this;
   }
 
 private:
