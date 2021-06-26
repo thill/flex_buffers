@@ -5,6 +5,7 @@
 #include <cstring>
 #include <memory>
 #include <ostream>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -122,12 +123,69 @@ public:
   }
 
   /**
+   * Wrap the given string.
+   * Beware ownership: you must ensure the referenced string remains valid.
+   * Consider wrap(std::shared_ptr<const char[]> data, size_t offset, size_t size) for safety if possible.
+   */
+  static BufferView wrap(const std::string& string) {
+    return wrap(string.data(), 0, string.size());
+  }
+
+  /**
    * Wrap the given string_view.
    * Beware ownership: you must ensure the referenced string remains valid.
    * Consider wrap(std::shared_ptr<const char[]> data, size_t offset, size_t size) for safety if possible.
    */
   static BufferView wrap(const std::string_view& string) {
     return wrap(string.data(), 0, string.size());
+  }
+
+  /**
+   * Wrap the given span.
+   * Beware ownership: you must ensure the span's underlying data remains valid.
+   * Consider wrap(std::shared_ptr<const char[]> data, size_t offset, size_t size) for safety if possible.
+   */
+  template <typename T, typename = typename std::enable_if_t<std::is_fundamental_v<T>>>
+  static BufferView wrap(const std::span<const T>& span) {
+    auto data = const_cast<char*>(reinterpret_cast<const char*>(span.data()));
+    auto size = span.size() * sizeof(T);
+    return BufferView{std::make_shared<BufferData>(data, 0, size), 0, size};
+  }
+
+  /**
+   * Wrap the given span.
+   * Beware ownership: you must ensure the span's underlying data remains valid.
+   * Consider wrap(std::shared_ptr<const char[]> data, size_t offset, size_t size) for safety if possible.
+   */
+  template <typename T, typename = typename std::enable_if_t<std::is_fundamental_v<T>>>
+  static BufferView wrap(const std::span<T>& span) {
+    auto data = reinterpret_cast<char*>(span.data());
+    size_t size = span.size() * sizeof(T);
+    return BufferView{std::make_shared<BufferData>(data, 0, size), 0, size};
+  }
+
+  /**
+   * Wrap the given span.
+   * Beware ownership: you must ensure the span's underlying data remains valid.
+   * Consider wrap(std::shared_ptr<const char[]> data, size_t offset, size_t size) for safety if possible.
+   */
+  template <typename T, size_t N, typename = typename std::enable_if_t<std::is_fundamental_v<T>>>
+  static BufferView wrap(const std::span<const T, N>& span) {
+    auto data = const_cast<char*>(reinterpret_cast<const char*>(span.data()));
+    size_t size = span.size() * sizeof(T);
+    return BufferView{std::make_shared<BufferData>(data, 0, size), 0, size};
+  }
+
+  /**
+   * Wrap the given span.
+   * Beware ownership: you must ensure the span's underlying data remains valid.
+   * Consider wrap(std::shared_ptr<const char[]> data, size_t offset, size_t size) for safety if possible.
+   */
+  template <typename T, size_t N, typename = typename std::enable_if_t<std::is_fundamental_v<T>>>
+  static BufferView wrap(const std::span<T, N>& span) {
+    auto data = reinterpret_cast<char*>(span.data());
+    size_t size = span.size() * sizeof(T);
+    return BufferView{std::make_shared<BufferData>(data, 0, size), 0, size};
   }
 
   /**
@@ -189,6 +247,14 @@ public:
   const char& operator[](size_t index) const {
     check_bounds(index, 1);
     return raw_data()[index];
+  }
+
+  /**
+   * Convert this BufferView to a std::span
+   */
+  operator std::span<const char>() const {
+    check_bounds(0, size());
+    return std::span{raw_data(), size()};
   }
 
   /**
@@ -290,10 +356,57 @@ public:
   }
 
   /**
+   * Allocate a new Buffer and copy the contents of the given string into it.
+   */
+  static Buffer copy_of(const std::string& string) {
+    return copy_of(string.data(), 0, string.size());
+  }
+
+  /**
    * Allocate a new Buffer and copy the contents of the given string_view into it.
    */
   static Buffer copy_of(const std::string_view& string) {
     return copy_of(string.data(), 0, string.size());
+  }
+
+  /**
+   * Allocate a new Buffer and copy the contents of the given span into it.
+   */
+  template <typename T, typename = typename std::enable_if_t<std::is_fundamental_v<T>>>
+  static BufferView copy_of(const std::span<const T>& span) {
+    auto data = const_cast<char*>(reinterpret_cast<const char*>(span.data()));
+    auto size = span.size() * sizeof(T);
+    return copy_of(data, 0, size);
+  }
+
+  /**
+   * Allocate a new Buffer and copy the contents of the given span into it.
+   */
+  template <typename T, typename = typename std::enable_if_t<std::is_fundamental_v<T>>>
+  static BufferView copy_of(const std::span<T>& span) {
+    auto data = reinterpret_cast<char*>(span.data());
+    size_t size = span.size() * sizeof(T);
+    return copy_of(data, 0, size);
+  }
+
+  /**
+   * Allocate a new Buffer and copy the contents of the given span into it.
+   */
+  template <typename T, size_t N, typename = typename std::enable_if_t<std::is_fundamental_v<T>>>
+  static BufferView copy_of(const std::span<const T, N>& span) {
+    auto data = reinterpret_cast<const char*>(span.data());
+    size_t size = span.size() * sizeof(T);
+    return copy_of(data, 0, size);
+  }
+
+  /**
+   * Allocate a new Buffer and copy the contents of the given span into it.
+   */
+  template <typename T, size_t N, typename = typename std::enable_if_t<std::is_fundamental_v<T>>>
+  static BufferView copy_of(const std::span<T, N>& span) {
+    auto data = reinterpret_cast<char*>(span.data());
+    size_t size = span.size() * sizeof(T);
+    return copy_of(data, 0, size);
   }
 
   /**
@@ -359,6 +472,22 @@ public:
    */
   const char& operator[](size_t index) const {
     return const_cast<Buffer&>(*this)[index];
+  }
+
+  /**
+   * Convert this Buffer to a std::span
+   */
+  operator std::span<char>() {
+    check_bounds(0, size());
+    return std::span{raw_data(), size()};
+  }
+
+  /**
+   * Convert this Buffer to a std::span
+   */
+  operator std::span<const char>() const {
+    check_bounds(0, size());
+    return std::span{raw_data(), size()};
   }
 
   /**

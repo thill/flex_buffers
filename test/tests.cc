@@ -16,6 +16,28 @@ TEST_CASE("BufferView::wrap(shared_ptr<char[]>)") {
   REQUIRE(buf.str() == "bcd");
 }
 
+TEST_CASE("BufferView::wrap(span<uint16_t>)") {
+  std::shared_ptr<uint16_t[]> arr{new uint16_t[2]};
+  arr.get()[0] = 257;
+  arr.get()[1] = 258;
+  std::span<uint16_t> src{arr.get(), 2};
+  auto buf = BufferView::wrap(src);
+  REQUIRE(buf.size() == 4);
+  REQUIRE(buf[0] + buf[1] == 2);
+  REQUIRE(buf[2] + buf[3] == 3);
+}
+
+TEST_CASE("BufferView::wrap(span<const uint16_t, size>)") {
+  std::shared_ptr<uint16_t[]> arr{new uint16_t[2]};
+  arr.get()[0] = 257;
+  arr.get()[1] = 258;
+  std::span<const uint16_t, 2> src{arr.get(), 2};
+  auto buf = BufferView::wrap(src);
+  REQUIRE(buf.size() == 4);
+  REQUIRE(buf[0] + buf[1] == 2);
+  REQUIRE(buf[2] + buf[3] == 3);
+}
+
 TEST_CASE("BufferView(const BufferView&) shallow") {
   std::string str{"hello world!"};
   auto src = Buffer::copy_of(str);
@@ -78,6 +100,16 @@ TEST_CASE("BufferView.operator[]") {
   REQUIRE(buf[1] == 'b');
   REQUIRE(buf[2] == 'c');
   delete[] src;
+}
+
+TEST_CASE("BufferView to std::span") {
+  std::string src{"hello world!"};
+  auto buf = BufferView::wrap(src);
+  std::span<const char> span = buf;
+  REQUIRE(span.size() == src.size());
+  REQUIRE(span[0] == 'h');
+  REQUIRE(span[1] == 'e');
+  REQUIRE(span[2] == 'l');
 }
 
 TEST_CASE("BufferView.read<>()") {
@@ -212,6 +244,30 @@ TEST_CASE("Buffer.operator[](index)") {
   REQUIRE(buf[2] == 'l');
   REQUIRE(buf[6] == 'W');
   REQUIRE(buf[11] == '!');
+}
+
+TEST_CASE("Buffer to std::span") {
+  auto buf = Buffer::allocate(3);
+  std::span<char> span = buf;
+  REQUIRE(span.size() == 3);
+  span[0] = 'a';
+  span[1] = 'b';
+  span[2] = 'c';
+  REQUIRE(buf[0] == 'a');
+  REQUIRE(buf[1] == 'b');
+  REQUIRE(buf[2] == 'c');
+}
+
+TEST_CASE("Buffer to std::span const") {
+  auto buf = Buffer::allocate(3);
+  buf[0] = 'a';
+  buf[1] = 'b';
+  buf[2] = 'c';
+  std::span<const char> span = buf;
+  REQUIRE(span.size() == 3);
+  REQUIRE(span[0] == 'a');
+  REQUIRE(span[1] == 'b');
+  REQUIRE(span[2] == 'c');
 }
 
 TEST_CASE("BufferView.write<>()") {

@@ -24,6 +24,7 @@ Factory Functions:
 * `static BufferView wrap(const char* data, size_t offset, size_t size)` - Wrap the given raw pointer at the given offset/size.
 * `static BufferView wrap(std::shared_ptr<const char[]> data, size_t offset, size_t size)` - Wrap the given shared_ptr buffer at the given offset/size.
 * `static BufferView wrap(const std::string_view& string)` - Wrap the given string_view.
+* `static BufferView wrap(const std::span<T>& span)` - Wrap the given span of a fundamental type.
 
 Member Functions:
 * `const char* data()` - Get the raw pointer to the start of the wrapped data.
@@ -127,6 +128,7 @@ Factory Functions:
 * `static Buffer copy_of(const char* data, size_t offset, size_t size)` - Allocate a new Buffer and copy the contents of the given data into it.
 * `static Buffer copy_of(const std::string_view& string)` - Allocate a new Buffer and copy the contents of the given string_view into it.
 * `static Buffer copy_of(const BufferView& buffer_view)` - Allocate a new Buffer and copy the contents of the given BufferView into it.
+* `static Buffer copy_of(const span<T>& span)` - Allocate a new Buffer and copy the contents of the given span of a fundamental type into it.
 
 Member Functions:
 * `void clear()` - Fill the data with 0's
