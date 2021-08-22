@@ -3,9 +3,11 @@
 #include <compare>
 #include <cstddef>
 #include <cstring>
+#include <iomanip>
 #include <memory>
 #include <ostream>
 #include <span>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
