@@ -502,6 +502,15 @@ public:
   }
 
   /**
+   * Write a span of any trivially copyable type to the given index.
+   */
+  template <typename T, typename = std::enable_if_t<std::is_trivially_copyable_v<T>>>
+  void write(const std::span<T>& src, size_t index = 0) {
+    check_bounds(index, sizeof(T) * src.size());
+    memcpy(reinterpret_cast<char*>(raw_data() + index), src.data(), sizeof(T) * src.size());
+  }
+
+  /**
    * Get a mutable buffer that wraps the same underlying data for the given range.
    * The returned buffer may outlive the source buffer.
    */

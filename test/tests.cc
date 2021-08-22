@@ -270,10 +270,21 @@ TEST_CASE("Buffer to std::span const") {
   REQUIRE(span[2] == 'c');
 }
 
-TEST_CASE("BufferView.write<>()") {
+TEST_CASE("BufferView.write<>(value)") {
   auto buf = Buffer::allocate(4);
   buf.write<uint32_t>(12345, 0);
   REQUIRE(buf.read<uint32_t>(0) == 12345);
+}
+
+TEST_CASE("BufferView.write<>(span)") {
+  auto buf = Buffer::allocate(8);
+  std::vector<uint32_t> vec;
+  vec.push_back(12345);
+  vec.push_back(67890);
+  std::span<uint32_t> span{vec.data(), vec.size()};
+  buf.write<uint32_t>(span, 0);
+  REQUIRE(buf.read<uint32_t>(0) == 12345);
+  REQUIRE(buf.read<uint32_t>(4) == 67890);
 }
 
 TEST_CASE("Buffer.subspan() shallow") {

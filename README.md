@@ -137,7 +137,8 @@ Member Functions:
 * `size_t size()` - Get the buffer size.
 * `Buffer subspan(size_t index = 0, size_t size = Buffer::npos)` - Get a mutable buffer that wraps the same underlying data for the given range.
 * `BufferView subview(size_t index = 0, size_t size = BufferView::npos)` - Get a sub-view of this buffer.
-* `void write<T>(const T& src, size_t index = 0)` - Write any fundamental type to the given index.
+* `void write<T>(const T& src, size_t index = 0)` - Write any trivially copyable type to the given index.
+* `void write<T>(const std::span<T>& src, size_t index = 0)` - Write a span of any trivially copyable type to the given index.
 
 Member Operators:
 * `char& operator[](size_t index)` - Get the byte at the given index.
