@@ -279,7 +279,7 @@ public:
     if (size == BufferView::npos)
       size = _size - index;
     check_bounds(index, size);
-    return BufferView{_data, index, size};
+    return BufferView{_data, _offset + index, size};
   }
 
   /**
@@ -518,7 +518,7 @@ public:
     if (size == Buffer::npos)
       size = _size - index;
     check_bounds(index, size);
-    return Buffer{_data, index, size};
+    return Buffer{_data, _offset + index, size};
   }
 
   /**

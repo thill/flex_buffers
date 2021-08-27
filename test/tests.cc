@@ -149,6 +149,20 @@ TEST_CASE("BufferView.hex()") {
   REQUIRE(oss.str() == "0x01070a21");
 }
 
+TEST_CASE("BufferView.subview() of subview") {
+  std::shared_ptr<char[]> src{new char[4]};
+  src[0] = 1;
+  src[1] = 7;
+  src[2] = 10;
+  src[3] = 33;
+  auto view = BufferView::wrap(src, 0, 4);
+  auto subview1 = view.subview(1, 2);
+  auto subview2 = subview1.subview(1, 1);
+  REQUIRE(subview1[0] == 7);
+  REQUIRE(subview1[1] == 10);
+  REQUIRE(subview2[0] == 10);
+}
+
 TEST_CASE("Buffer::wrap(shared_ptr<char[]>)") {
   std::shared_ptr<char[]> src{new char[5]};
   src[0] = 'a';
@@ -324,6 +338,18 @@ TEST_CASE("Buffer.clear()") {
   REQUIRE(buf.str() == "hello!");
   buf.clear();
   REQUIRE(buf.str() == "\0\0\0\0\0\0");
+}
+
+TEST_CASE("Buffer.subspan() of subspan") {
+  std::string src{"hello!"};
+  auto buf = Buffer::copy_of(src);
+  auto subspan1 = buf.subspan(3, 3);
+  auto subspan2 = subspan1.subspan(1, 2);
+  REQUIRE(subspan1[0] == 'l');
+  REQUIRE(subspan1[1] == 'o');
+  REQUIRE(subspan1[2] == '!');
+  REQUIRE(subspan2[0] == 'o');
+  REQUIRE(subspan2[1] == '!');
 }
 
 TEST_CASE("FlexBuffer(const FlexBuffer&) deep") {
