@@ -15,7 +15,7 @@
 namespace flexbuf {
 
 enum class ResizeMode { KeepData, IgnoreData };
-class BufferView;
+class BufferSpan;
 class Buffer;
 class FlexBuffer;
 class BufferReader;
@@ -71,14 +71,13 @@ public:
 } // namespace internal
 
 /**
- * A const view of a buffer that wraps existing memory.
+ * A fixed-size buffer that wraps existing memory.
  * Pass-by-value semantics will point at the same underlying memory - O(1).
  * The default constructor wraps a nullptr and has a size of 0.
- * Static factory methods are used to keep consistent semantics with the Buffer class.
+ * Static factory methods are used for wrap semantics.
  */
-class BufferView {
+class BufferSpan {
 private:
-  friend class BufferSpan;
   friend class Buffer;
   friend class FlexBuffer;
 
@@ -88,12 +87,12 @@ private:
   size_t _offset;
   size_t _size;
 
-  BufferView(BufferDataPtr& data, size_t offset, size_t size) : _data{data}, _offset{offset}, _size{size} {};
-  BufferView(BufferDataPtr&& data, size_t offset, size_t size) : _data{data}, _offset{offset}, _size{size} {};
+  BufferSpan(BufferDataPtr& data, size_t offset, size_t size) : _data{data}, _offset{offset}, _size{size} {};
+  BufferSpan(BufferDataPtr&& data, size_t offset, size_t size) : _data{data}, _offset{offset}, _size{size} {};
 
   inline void check_bounds(size_t index, size_t size) const {
     auto end = index + size;
-    // if "beyond size of this view" or "beyond capacity of underlying data"
+    // if "beyond size of this span" or "beyond capacity of underlying data"
     if (end > _size || end > _data->capacity() - _offset)
       throw std::range_error{"array index out of bounds"};
   }
@@ -114,218 +113,10 @@ public:
    * Beware ownership: you must ensure the raw pointer remains valid.
    * Consider wrap(std::shared_ptr<const char[]> data, size_t offset, size_t size) for safety if possible.
    */
-  static BufferView wrap(const char* data, size_t offset, size_t size) {
-    return BufferView{std::make_shared<BufferData>(const_cast<char*>(data), offset, size), 0, size};
+  static const BufferSpan wrap(const char* data, size_t offset, size_t size) {
+    return BufferSpan{std::make_shared<BufferData>(const_cast<char*>(data), offset, size), 0, size};
   }
 
-  /**
-   * Wrap the given shared_ptr buffer at the given offset/size.
-   */
-  static BufferView wrap(std::shared_ptr<const char[]> data, size_t offset, size_t size) {
-    return BufferView{std::make_shared<BufferData>(std::const_pointer_cast<char[]>(data), offset, size), 0, size};
-  }
-
-  /**
-   * Wrap the given string.
-   * Beware ownership: you must ensure the referenced string remains valid.
-   * Consider wrap(std::shared_ptr<const char[]> data, size_t offset, size_t size) for safety if possible.
-   */
-  static BufferView wrap(const std::string& string) {
-    return wrap(string.data(), 0, string.size());
-  }
-
-  /**
-   * Wrap the given string_view.
-   * Beware ownership: you must ensure the referenced string remains valid.
-   * Consider wrap(std::shared_ptr<const char[]> data, size_t offset, size_t size) for safety if possible.
-   */
-  static BufferView wrap(const std::string_view& string) {
-    return wrap(string.data(), 0, string.size());
-  }
-
-  /**
-   * Wrap the given span.
-   * Beware ownership: you must ensure the span's underlying data remains valid.
-   * Consider wrap(std::shared_ptr<const char[]> data, size_t offset, size_t size) for safety if possible.
-   */
-  template <typename T, typename = typename std::enable_if_t<std::is_fundamental_v<T>>>
-  static BufferView wrap(const std::span<const T>& span) {
-    auto data = const_cast<char*>(reinterpret_cast<const char*>(span.data()));
-    auto size = span.size() * sizeof(T);
-    return BufferView{std::make_shared<BufferData>(data, 0, size), 0, size};
-  }
-
-  /**
-   * Wrap the given span.
-   * Beware ownership: you must ensure the span's underlying data remains valid.
-   * Consider wrap(std::shared_ptr<const char[]> data, size_t offset, size_t size) for safety if possible.
-   */
-  template <typename T, typename = typename std::enable_if_t<std::is_fundamental_v<T>>>
-  static BufferView wrap(const std::span<T>& span) {
-    auto data = reinterpret_cast<char*>(span.data());
-    size_t size = span.size() * sizeof(T);
-    return BufferView{std::make_shared<BufferData>(data, 0, size), 0, size};
-  }
-
-  /**
-   * Wrap the given span.
-   * Beware ownership: you must ensure the span's underlying data remains valid.
-   * Consider wrap(std::shared_ptr<const char[]> data, size_t offset, size_t size) for safety if possible.
-   */
-  template <typename T, size_t N, typename = typename std::enable_if_t<std::is_fundamental_v<T>>>
-  static BufferView wrap(const std::span<const T, N>& span) {
-    auto data = const_cast<char*>(reinterpret_cast<const char*>(span.data()));
-    size_t size = span.size() * sizeof(T);
-    return BufferView{std::make_shared<BufferData>(data, 0, size), 0, size};
-  }
-
-  /**
-   * Wrap the given span.
-   * Beware ownership: you must ensure the span's underlying data remains valid.
-   * Consider wrap(std::shared_ptr<const char[]> data, size_t offset, size_t size) for safety if possible.
-   */
-  template <typename T, size_t N, typename = typename std::enable_if_t<std::is_fundamental_v<T>>>
-  static BufferView wrap(const std::span<T, N>& span) {
-    auto data = reinterpret_cast<char*>(span.data());
-    size_t size = span.size() * sizeof(T);
-    return BufferView{std::make_shared<BufferData>(data, 0, size), 0, size};
-  }
-
-  /**
-   * Create a buffer with size=0 and set underlying data to nullptr
-   */
-  BufferView() : _data{std::make_shared<BufferData>()}, _offset{0}, _size{0} {};
-
-  /**
-   * Shallow copy
-   */
-  BufferView(const BufferView& rhs) = default;
-  BufferView& operator=(const BufferView&) = default;
-
-  /**
-   * Move
-   */
-  BufferView(BufferView&& rhs) : _data{std::move(rhs._data)}, _offset{rhs._offset}, _size{rhs._size} {
-    rhs._offset = 0;
-    rhs._size = 0;
-  }
-
-  /**
-   * Move
-   */
-  BufferView& operator=(BufferView&& rhs) {
-    _data = std::move(rhs._data);
-    _offset = rhs._offset;
-    _size = rhs._size;
-    rhs._offset = 0;
-    rhs._size = 0;
-    return *this;
-  }
-
-  ~BufferView() = default;
-
-  /**
-   * Get the raw pointer to the start of the underlying data.
-   */
-  inline const char* data() const {
-    check_bounds(0, 0);
-    return raw_data();
-  }
-
-  /**
-   * Get the buffer size.
-   */
-  inline size_t size() const noexcept {
-    return _size;
-  }
-
-  /**
-   * Get the byte at the given index.
-   * Throws on array index out of bounds.
-   */
-  const char& operator[](size_t index) const {
-    check_bounds(index, 1);
-    return raw_data()[index];
-  }
-
-  /**
-   * Convert this BufferView to a std::span
-   */
-  operator std::span<const char>() const {
-    check_bounds(0, size());
-    return std::span{raw_data(), size()};
-  }
-
-  /**
-   * Return a copy of any fundamental type from the given index.
-   */
-  template <typename T, typename = std::enable_if_t<std::is_fundamental_v<T>>>
-  const T read(size_t index) const {
-    check_bounds(index, sizeof(T));
-    T v;
-    memcpy(&v, reinterpret_cast<const char*>(raw_data() + index), sizeof(T));
-    return v;
-  }
-
-  /**
-   * Get a sub-view of this buffer.
-   * Throws on array index out of bounds.
-   * The returned buffer may outlive the source buffer.
-   */
-  BufferView subview(size_t index = 0, size_t size = BufferView::npos) {
-    if (size == BufferView::npos)
-      size = _size - index;
-    check_bounds(index, size);
-    return BufferView{_data, _offset + index, size};
-  }
-
-  /**
-   * Get a sub-view of this buffer.
-   * Throws on array index out of bounds.
-   * The returned buffer may outlive the source buffer.
-   */
-  const BufferView subview(size_t index = 0, size_t size = BufferView::npos) const {
-    return const_cast<BufferView&>(*this).subview(index, size);
-  }
-
-  /**
-   * Convert the contents to a std::string
-   */
-  std::string str() const {
-    check_bounds(0, _size);
-    return std::string{raw_data(), 0, _size};
-  }
-
-  /**
-   * Convert the contents to a hex string
-   */
-  std::string hex() const {
-    check_bounds(0, _size);
-    std::ostringstream oss;
-    oss << "0x";
-    oss << std::hex << std::setfill('0');
-    for (size_t i = 0; i < _size; ++i)
-      oss << std::setw(2) << static_cast<int>(raw_data()[i]);
-    return oss.str();
-  }
-};
-
-/**
- * A fixed-size buffer that wraps existing memory.
- * Pass-by-value semantics will point at the same underlying memory - O(1).
- * The default constructor wraps a nullptr and has a size of 0.
- * Static factory methods are used for allocation and copy semantics.
- * This class extends BufferView.
- */
-class BufferSpan : public BufferView {
-private:
-  friend class Buffer;
-  friend class FlexBuffer;
-
-  BufferSpan(BufferDataPtr& data, size_t offset, size_t size) : BufferView{data, offset, size} {};
-  BufferSpan(BufferDataPtr&& data, size_t offset, size_t size) : BufferView{data, offset, size} {};
-
-public:
   /**
    * Wrap the given raw pointer at the given offset/size.
    * Beware ownership: you must ensure the raw pointer remains valid.
@@ -338,24 +129,116 @@ public:
   /**
    * Wrap the given shared_ptr buffer at the given offset/size.
    */
+  static const BufferSpan wrap(std::shared_ptr<const char[]> data, size_t offset, size_t size) {
+    return BufferSpan{std::make_shared<BufferData>(std::const_pointer_cast<char[]>(data), offset, size), 0, size};
+  }
+
+  /**
+   * Wrap the given shared_ptr buffer at the given offset/size.
+   */
   static BufferSpan wrap(std::shared_ptr<char[]> data, size_t offset, size_t size) {
     return BufferSpan{std::make_shared<BufferData>(data, offset, size), 0, size};
   }
 
   /**
-   * Create a buffer span with size=0 and set underlying data to nullptr
+   * Wrap the given string.
+   * Beware ownership: you must ensure the referenced string remains valid.
+   * Consider wrap(std::shared_ptr<const char[]> data, size_t offset, size_t size) for safety if possible.
    */
-  BufferSpan() : BufferView{} {};
+  static BufferSpan wrap(const std::string& string) {
+    return wrap(string.data(), 0, string.size());
+  }
+
+  /**
+   * Wrap the given string_view.
+   * Beware ownership: you must ensure the referenced string remains valid.
+   * Consider wrap(std::shared_ptr<const char[]> data, size_t offset, size_t size) for safety if possible.
+   */
+  static const BufferSpan wrap(const std::string_view& string) {
+    return wrap(string.data(), 0, string.size());
+  }
+
+  /**
+   * Wrap the given span.
+   * Beware ownership: you must ensure the span's underlying data remains valid.
+   * Consider wrap(std::shared_ptr<const char[]> data, size_t offset, size_t size) for safety if possible.
+   */
+  template <typename T, typename = typename std::enable_if_t<std::is_fundamental_v<T>>>
+  static const BufferSpan wrap(const std::span<const T>& span) {
+    auto data = const_cast<char*>(reinterpret_cast<const char*>(span.data()));
+    auto size = span.size() * sizeof(T);
+    return BufferSpan{std::make_shared<BufferData>(data, 0, size), 0, size};
+  }
+
+  /**
+   * Wrap the given span.
+   * Beware ownership: you must ensure the span's underlying data remains valid.
+   * Consider wrap(std::shared_ptr<const char[]> data, size_t offset, size_t size) for safety if possible.
+   */
+  template <typename T, typename = typename std::enable_if_t<std::is_fundamental_v<T>>>
+  static BufferSpan wrap(const std::span<T>& span) {
+    auto data = reinterpret_cast<char*>(span.data());
+    auto size = span.size() * sizeof(T);
+    return BufferSpan{std::make_shared<BufferData>(data, 0, size), 0, size};
+  }
+
+  /**
+   * Wrap the given span.
+   * Beware ownership: you must ensure the span's underlying data remains valid.
+   * Consider wrap(std::shared_ptr<const char[]> data, size_t offset, size_t size) for safety if possible.
+   */
+  template <typename T, size_t N, typename = typename std::enable_if_t<std::is_fundamental_v<T>>>
+  static const BufferSpan wrap(const std::span<const T, N>& span) {
+    auto data = const_cast<char*>(reinterpret_cast<const char*>(span.data()));
+    size_t size = span.size() * sizeof(T);
+    return BufferSpan{std::make_shared<BufferData>(data, 0, size), 0, size};
+  }
+
+  /**
+   * Wrap the given span.
+   * Beware ownership: you must ensure the span's underlying data remains valid.
+   * Consider wrap(std::shared_ptr<const char[]> data, size_t offset, size_t size) for safety if possible.
+   */
+  template <typename T, size_t N, typename = typename std::enable_if_t<std::is_fundamental_v<T>>>
+  static BufferSpan wrap(const std::span<T, N>& span) {
+    auto data = reinterpret_cast<char*>(span.data());
+    size_t size = span.size() * sizeof(T);
+    return BufferSpan{std::make_shared<BufferData>(data, 0, size), 0, size};
+  }
+
+  /**
+   * Create a buffer with size=0 and set underlying data to nullptr
+   */
+  BufferSpan() : _data{std::make_shared<BufferData>()}, _offset{0}, _size{0} {};
 
   /**
    * Shallow copy
    */
   BufferSpan(const BufferSpan& rhs) = default;
-  BufferSpan& operator=(const BufferSpan& rhs) = default;
+  BufferSpan& operator=(const BufferSpan&) = default;
 
-  BufferSpan(BufferSpan&& rhs) = default;
-  BufferSpan& operator=(BufferSpan&& rhs) = default;
+  BufferSpan(BufferSpan&& rhs) : _data{std::move(rhs._data)}, _offset{rhs._offset}, _size{rhs._size} {
+    rhs._offset = 0;
+    rhs._size = 0;
+  }
+
+  BufferSpan& operator=(BufferSpan&& rhs) {
+    _data = std::move(rhs._data);
+    _offset = rhs._offset;
+    _size = rhs._size;
+    rhs._offset = 0;
+    rhs._size = 0;
+    return *this;
+  }
+
   ~BufferSpan() = default;
+
+  /**
+   * Get the buffer size.
+   */
+  inline size_t size() const noexcept {
+    return _size;
+  }
 
   /**
    * Get the raw pointer to the start of the underlying data.
@@ -406,6 +289,17 @@ public:
   }
 
   /**
+   * Return a copy of any fundamental type from the given index.
+   */
+  template <typename T, typename = std::enable_if_t<std::is_fundamental_v<T>>>
+  const T read(size_t index) const {
+    check_bounds(index, sizeof(T));
+    T v;
+    memcpy(&v, reinterpret_cast<const char*>(raw_data() + index), sizeof(T));
+    return v;
+  }
+
+  /**
    * Write any trivially copyable type to the given index.
    */
   template <typename T, typename = std::enable_if_t<std::is_trivially_copyable_v<T>>>
@@ -448,6 +342,27 @@ public:
   void clear() {
     check_bounds(0, _size);
     memset(raw_data(), 0, _size);
+  }
+
+  /**
+   * Convert the contents to a std::string
+   */
+  std::string str() const {
+    check_bounds(0, _size);
+    return std::string{raw_data(), 0, _size};
+  }
+
+  /**
+   * Convert the contents to a hex string
+   */
+  std::string hex() const {
+    check_bounds(0, _size);
+    std::ostringstream oss;
+    oss << "0x";
+    oss << std::hex << std::setfill('0');
+    for (size_t i = 0; i < _size; ++i)
+      oss << std::setw(2) << static_cast<int>(raw_data()[i]);
+    return oss.str();
   }
 };
 
@@ -534,10 +449,10 @@ public:
   }
 
   /**
-   * Allocate a new Buffer and copy the contents of the given BufferView into it.
+   * Allocate a new Buffer and copy the contents of the given BufferSpan into it.
    */
-  static Buffer copy_of(const BufferView& buffer_view) {
-    return copy_of(buffer_view.data(), 0, buffer_view.size());
+  static Buffer copy_of(const BufferSpan& buffer_span) {
+    return copy_of(buffer_span.data(), 0, buffer_span.size());
   }
 
   /**
@@ -711,7 +626,7 @@ public:
   /**
    * Append the given buffer to the end of this FlexBuffer, growing by the given buffer's size.
    */
-  FlexBuffer& operator<<(const BufferView& buffer) noexcept {
+  FlexBuffer& operator<<(const BufferSpan& buffer) noexcept {
     return append(buffer.data(), 0, buffer.size());
   }
 
@@ -742,12 +657,12 @@ private:
 
 class BufferReader {
 private:
-  const BufferView _view;
+  const BufferSpan _span;
   size_t _position = 0;
 
 public:
   BufferReader() = delete;
-  BufferReader(const BufferView& view) : _view(view){};
+  BufferReader(const BufferSpan& span) : _span(span){};
   BufferReader(const BufferReader&) = default;
   BufferReader& operator=(const BufferReader&) = default;
   BufferReader(BufferReader&&) = default;
@@ -771,43 +686,43 @@ public:
    * Get the remaining bytes to be read.
    */
   size_t remaining() const noexcept {
-    return _position < _view.size() ? _view.size() - _position : 0;
+    return _position < _span.size() ? _span.size() - _position : 0;
   }
 
   /**
-   * Get a view of the next "size" bytes of the underlying BufferView from the current position.
-   * After creating the view, this Reader's position remains unchanged.
+   * Get a span of the next "size" bytes of the underlying BufferSpan from the current position.
+   * After creating the span, this Reader's position remains unchanged.
    */
-  const BufferView peek(size_t size) const {
-    return _view.subview(_position, size);
+  const BufferSpan peek(size_t size) const {
+    return _span.subspan(_position, size);
   }
 
   /**
-   * Get a copy of any fundemental type from the underlying BufferView from the current position.
+   * Get a copy of any fundemental type from the underlying BufferSpan from the current position.
    * After reading the value, this Reader's position remains unchanged.
    */
   template <typename T, typename = typename std::enable_if_t<std::is_fundamental_v<T>>>
   T peek() const {
-    return _view.read<T>(_position);
+    return _span.read<T>(_position);
   }
 
   /**
-   * Get a view of the next "size" bytes of the underlying BufferView from the current position.
-   * After creating the view, this Reader's position is advanced by the size.
+   * Get a span of the next "size" bytes of the underlying BufferSpan from the current position.
+   * After creating the span, this Reader's position is advanced by the size.
    */
-  const BufferView next(size_t size) {
-    BufferView result = _view.subview(_position, size);
+  const BufferSpan next(size_t size) {
+    BufferSpan result = _span.subspan(_position, size);
     _position += size;
     return result;
   }
 
   /**
-   * Get a copy of any fundemental type from the underlying BufferView from the current position.
+   * Get a copy of any fundemental type from the underlying BufferSpan from the current position.
    * After reading the value, this Reader's position is advanced by the size.
    */
   template <typename T, typename = typename std::enable_if_t<std::is_fundamental_v<T>>>
   T next() {
-    auto result = _view.read<T>(_position);
+    auto result = _span.read<T>(_position);
     _position += sizeof(T);
     return result;
   }
@@ -815,12 +730,12 @@ public:
 
 class BufferWriter {
 private:
-  Buffer& _buf;
+  BufferSpan& _span;
   size_t _position = 0;
 
 public:
   BufferWriter() = delete;
-  BufferWriter(Buffer& buf) : _buf(buf){};
+  BufferWriter(BufferSpan& span) : _span(span){};
   BufferWriter(const BufferWriter&) = delete;
   BufferWriter& operator=(const BufferWriter&) = delete;
   BufferWriter(BufferWriter&) = default;
@@ -846,7 +761,7 @@ public:
    * Get the remaining bytes that may be written before overflowing the buffer.
    */
   size_t remaining() const noexcept {
-    return _position < _buf.size() ? _buf.size() - _position : 0;
+    return _position < _span.size() ? _span.size() - _position : 0;
   }
 
   /**
@@ -854,7 +769,7 @@ public:
    * After creating the span, this Reader's position remains unchanged.
    */
   BufferSpan peek(size_t size) {
-    return _buf.subspan(_position, size);
+    return _span.subspan(_position, size);
   }
 
   /**
@@ -862,7 +777,7 @@ public:
    * After creating the span, this Reader's position is advanced by the size.
    */
   BufferSpan next(size_t size) {
-    BufferSpan result = _buf.subspan(_position, size);
+    BufferSpan result = _span.subspan(_position, size);
     _position += size;
     return result;
   }
@@ -870,7 +785,7 @@ public:
   /**
    * Write the given buffer at the current position, advancing the position by given buffer's size.
    */
-  BufferWriter& operator<<(const BufferView& buffer) {
+  BufferWriter& operator<<(const BufferSpan& buffer) {
     return write(buffer.data(), 0, buffer.size());
   }
 
@@ -886,18 +801,18 @@ public:
    */
   template <typename T, typename = typename std::enable_if_t<std::is_fundamental_v<T>>>
   BufferWriter& operator<<(const T& src) {
-    if (_position + sizeof(T) > _buf.size())
+    if (_position + sizeof(T) > _span.size())
       throw std::runtime_error{"array index out of bounds"};
-    memcpy(reinterpret_cast<char*>(_buf.data() + _position), &src, sizeof(T));
+    memcpy(reinterpret_cast<char*>(_span.data() + _position), &src, sizeof(T));
     _position += sizeof(T);
     return *this;
   }
 
 private:
   inline BufferWriter& write(const char* src, size_t offset, size_t size) {
-    if (_position + size > _buf.size())
+    if (_position + size > _span.size())
       throw std::runtime_error{"array index out of bounds"};
-    memcpy(reinterpret_cast<char*>(_buf.data() + _position), reinterpret_cast<const char*>(src + offset), size);
+    memcpy(reinterpret_cast<char*>(_span.data() + _position), reinterpret_cast<const char*>(src + offset), size);
     _position += size;
     return *this;
   }
@@ -905,7 +820,7 @@ private:
 
 } // namespace flexbuf
 
-std::ostream& operator<<(std::ostream& os, const flexbuf::BufferView& view) {
-  os << view.hex();
+std::ostream& operator<<(std::ostream& os, const flexbuf::BufferSpan& span) {
+  os << span.hex();
   return os;
 }

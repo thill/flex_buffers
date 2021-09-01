@@ -4,45 +4,45 @@
 
 using namespace flexbuf;
 
-TEST_CASE("BufferView::wrap(shared_ptr<char[]>)") {
+TEST_CASE("BufferSpan::wrap(shared_ptr<char[]>)") {
   std::shared_ptr<char[]> src{new char[5]};
   src[0] = 'a';
   src[1] = 'b';
   src[2] = 'c';
   src[3] = 'd';
   src[4] = 'e';
-  auto buf = BufferView::wrap(src, 1, 3);
+  auto buf = BufferSpan::wrap(src, 1, 3);
   REQUIRE(src.use_count() == 2);
   REQUIRE(buf.str() == "bcd");
 }
 
-TEST_CASE("BufferView::wrap(span<uint16_t>)") {
+TEST_CASE("BufferSpan::wrap(span<uint16_t>)") {
   std::shared_ptr<uint16_t[]> arr{new uint16_t[2]};
   arr.get()[0] = 257;
   arr.get()[1] = 258;
   std::span<uint16_t> src{arr.get(), 2};
-  auto buf = BufferView::wrap(src);
+  auto buf = BufferSpan::wrap(src);
   REQUIRE(buf.size() == 4);
   REQUIRE(buf[0] + buf[1] == 2);
   REQUIRE(buf[2] + buf[3] == 3);
 }
 
-TEST_CASE("BufferView::wrap(span<const uint16_t, size>)") {
+TEST_CASE("BufferSpan::wrap(span<const uint16_t, size>)") {
   std::shared_ptr<uint16_t[]> arr{new uint16_t[2]};
   arr.get()[0] = 257;
   arr.get()[1] = 258;
   std::span<const uint16_t, 2> src{arr.get(), 2};
-  auto buf = BufferView::wrap(src);
+  auto buf = BufferSpan::wrap(src);
   REQUIRE(buf.size() == 4);
   REQUIRE(buf[0] + buf[1] == 2);
   REQUIRE(buf[2] + buf[3] == 3);
 }
 
-TEST_CASE("BufferView(const BufferView&) shallow") {
+TEST_CASE("BufferSpan(const BufferSpan&) shallow") {
   std::string str{"hello world!"};
   auto src = Buffer::copy_of(str);
-  BufferView buf = src.subview();
-  BufferView copy{buf};
+  BufferSpan buf = src.subspan();
+  BufferSpan copy{buf};
   src[0] = 'H';
   src[6] = 'W';
   REQUIRE(src.str() == "Hello World!");
@@ -50,11 +50,11 @@ TEST_CASE("BufferView(const BufferView&) shallow") {
   REQUIRE(copy.str() == "Hello World!");
 }
 
-TEST_CASE("BufferView operator=(const BufferView&) shallow") {
+TEST_CASE("BufferSpan operator=(const BufferSpan&) shallow") {
   std::string str{"hello world!"};
   auto src = Buffer::copy_of(str);
-  BufferView buf = src.subview();
-  BufferView copy;
+  BufferSpan buf = src.subspan();
+  BufferSpan copy;
   copy = buf;
   src[0] = 'H';
   src[6] = 'W';
@@ -63,20 +63,20 @@ TEST_CASE("BufferView operator=(const BufferView&) shallow") {
   REQUIRE(copy.str() == "Hello World!");
 }
 
-TEST_CASE("BufferView.data() from wrapped raw pointer") {
+TEST_CASE("BufferSpan.data() from wrapped raw pointer") {
   std::string src{"hello world!"};
-  auto buf = BufferView::wrap(src);
+  auto buf = BufferSpan::wrap(src);
   REQUIRE(buf.data()[0] == 'h');
   REQUIRE(buf.data()[2] == 'l');
   REQUIRE(buf.data()[11] == '!');
 }
 
-TEST_CASE("BufferView.data() from wrapped shared pointer") {
+TEST_CASE("BufferSpan.data() from wrapped shared pointer") {
   std::shared_ptr<char[]> src{new char[3]};
   src[0] = 'a';
   src[1] = 'b';
   src[2] = 'c';
-  auto buf = BufferView::wrap(src, 0, 3);
+  auto buf = BufferSpan::wrap(src, 0, 3);
   REQUIRE(src.use_count() == 2);
   src = nullptr;
   REQUIRE(buf.data()[0] == 'a');
@@ -84,27 +84,27 @@ TEST_CASE("BufferView.data() from wrapped shared pointer") {
   REQUIRE(buf.data()[2] == 'c');
 }
 
-TEST_CASE("BufferView.size()") {
+TEST_CASE("BufferSpan.size()") {
   std::string src{"hello world!"};
-  auto buf = BufferView::wrap(src);
+  auto buf = BufferSpan::wrap(src);
   REQUIRE(buf.size() == 12);
 }
 
-TEST_CASE("BufferView.operator[]") {
+TEST_CASE("BufferSpan.operator[]") {
   char* src = new char[3];
   src[0] = 'a';
   src[1] = 'b';
   src[2] = 'c';
-  auto buf = BufferView::wrap(src, 0, 3);
+  auto buf = BufferSpan::wrap(src, 0, 3);
   REQUIRE(buf[0] == 'a');
   REQUIRE(buf[1] == 'b');
   REQUIRE(buf[2] == 'c');
   delete[] src;
 }
 
-TEST_CASE("BufferView to std::span") {
+TEST_CASE("BufferSpan to std::span") {
   std::string src{"hello world!"};
-  auto buf = BufferView::wrap(src);
+  auto buf = BufferSpan::wrap(src);
   std::span<const char> span = buf;
   REQUIRE(span.size() == src.size());
   REQUIRE(span[0] == 'h');
@@ -112,55 +112,55 @@ TEST_CASE("BufferView to std::span") {
   REQUIRE(span[2] == 'l');
 }
 
-TEST_CASE("BufferView.read<>()") {
+TEST_CASE("BufferSpan.read<>()") {
   char* src = new char[3];
   src[0] = 255;
   src[1] = 1;
   src[2] = 1;
-  auto buf = BufferView::wrap(src, 0, 3);
+  auto buf = BufferSpan::wrap(src, 0, 3);
   REQUIRE(buf.read<uint16_t>(1) == static_cast<uint16_t>(257));
 }
 
-TEST_CASE("BufferView.subview()") {
+TEST_CASE("BufferSpan.subspan()") {
   std::string src{"hello world!"};
-  auto buf = BufferView::wrap(src);
-  auto view = buf.subview(6);
-  REQUIRE(view.str() == "world!");
+  auto buf = BufferSpan::wrap(src);
+  auto span = buf.subspan(6);
+  REQUIRE(span.str() == "world!");
 }
 
-TEST_CASE("BufferView.subview() does not dangle") {
+TEST_CASE("BufferSpan.subspan() does not dangle") {
   std::string src{"hello world!"};
-  auto buf = std::make_shared<BufferView>(BufferView::wrap(src));
-  auto view = buf->subview(6);
+  auto buf = std::make_shared<BufferSpan>(BufferSpan::wrap(src));
+  auto span = buf->subspan(6);
   buf.reset();
-  REQUIRE(view.str() == "world!");
+  REQUIRE(span.str() == "world!");
 }
 
-TEST_CASE("BufferView.hex()") {
+TEST_CASE("BufferSpan.hex()") {
   std::shared_ptr<char[]> src{new char[4]};
   src[0] = 1;
   src[1] = 7;
   src[2] = 10;
   src[3] = 33;
-  auto view = BufferView::wrap(src, 0, 4);
-  REQUIRE(view.hex() == "0x01070a21");
+  auto span = BufferSpan::wrap(src, 0, 4);
+  REQUIRE(span.hex() == "0x01070a21");
   std::ostringstream oss;
-  oss << Buffer::copy_of(view);
+  oss << Buffer::copy_of(span);
   REQUIRE(oss.str() == "0x01070a21");
 }
 
-TEST_CASE("BufferView.subview() of subview") {
+TEST_CASE("BufferSpan.subspan() of subspan") {
   std::shared_ptr<char[]> src{new char[4]};
   src[0] = 1;
   src[1] = 7;
   src[2] = 10;
   src[3] = 33;
-  auto view = BufferView::wrap(src, 0, 4);
-  auto subview1 = view.subview(1, 2);
-  auto subview2 = subview1.subview(1, 1);
-  REQUIRE(subview1[0] == 7);
-  REQUIRE(subview1[1] == 10);
-  REQUIRE(subview2[0] == 10);
+  auto span = BufferSpan::wrap(src, 0, 4);
+  auto subspan1 = span.subspan(1, 2);
+  auto subspan2 = subspan1.subspan(1, 1);
+  REQUIRE(subspan1[0] == 7);
+  REQUIRE(subspan1[1] == 10);
+  REQUIRE(subspan2[0] == 10);
 }
 
 TEST_CASE("Buffer::wrap(shared_ptr<char[]>)") {
@@ -284,13 +284,13 @@ TEST_CASE("Buffer to std::span const") {
   REQUIRE(span[2] == 'c');
 }
 
-TEST_CASE("BufferView.write<>(value)") {
+TEST_CASE("BufferSpan.write<>(value)") {
   auto buf = Buffer::allocate(4);
   buf.write<uint32_t>(12345, 0);
   REQUIRE(buf.read<uint32_t>(0) == 12345);
 }
 
-TEST_CASE("BufferView.write<>(span)") {
+TEST_CASE("BufferSpan.write<>(span)") {
   auto buf = Buffer::allocate(8);
   std::vector<uint32_t> vec;
   vec.push_back(12345);
@@ -340,18 +340,6 @@ TEST_CASE("Buffer.clear()") {
   REQUIRE(buf.str() == "\0\0\0\0\0\0");
 }
 
-TEST_CASE("Buffer.subspan() of subspan") {
-  std::string src{"hello!"};
-  auto buf = Buffer::copy_of(src);
-  auto subspan1 = buf.subspan(3, 3);
-  auto subspan2 = subspan1.subspan(1, 2);
-  REQUIRE(subspan1[0] == 'l');
-  REQUIRE(subspan1[1] == 'o');
-  REQUIRE(subspan1[2] == '!');
-  REQUIRE(subspan2[0] == 'o');
-  REQUIRE(subspan2[1] == '!');
-}
-
 TEST_CASE("FlexBuffer(const FlexBuffer&) deep") {
   FlexBuffer buf{8};
   buf << "hello world!";
@@ -382,12 +370,12 @@ TEST_CASE("FlexBuffer operator=(const FlexBuffer&) deep") {
   REQUIRE(copy.str() == "hello World!");
 }
 
-TEST_CASE("FlexBuffer.subview() does not dangle") {
+TEST_CASE("FlexBuffer.subspan() does not dangle") {
   auto buf = std::make_shared<FlexBuffer>();
   *buf << "hello world!";
-  auto view = buf->subview(6);
+  auto span = buf->subspan(6);
   buf.reset();
-  REQUIRE(view.str() == "world!");
+  REQUIRE(span.str() == "world!");
 }
 
 TEST_CASE("FlexBuffer.capacity()") {
@@ -470,7 +458,7 @@ TEST_CASE("FlexBuffer.resize(grow, KeepData)") {
   buf << "hello world!";
   buf.resize(100);
   REQUIRE(buf.size() == 100);
-  REQUIRE(buf.subview(0, 12).str() == "hello world!");
+  REQUIRE(buf.subspan(0, 12).str() == "hello world!");
 }
 
 TEST_CASE("FlexBuffer.resize(grow, IgnoreData)") {
@@ -478,31 +466,31 @@ TEST_CASE("FlexBuffer.resize(grow, IgnoreData)") {
   buf << "hello world!";
   buf.resize(100, ResizeMode::IgnoreData);
   REQUIRE(buf.size() == 100);
-  REQUIRE(buf.subview(0, 12).str() != "hello world!");
+  REQUIRE(buf.subspan(0, 12).str() != "hello world!");
 }
 
 TEST_CASE("FlexBuffer.reserve(size)") {
   FlexBuffer buf;
-  auto view1 = buf.reserve(2);
-  auto view2 = buf.reserve(2);
-  view1[0] = 'a';
-  view1[1] = 'b';
-  view2[0] = 'c';
-  view2[1] = 'd';
+  auto span1 = buf.reserve(2);
+  auto span2 = buf.reserve(2);
+  span1[0] = 'a';
+  span1[1] = 'b';
+  span2[0] = 'c';
+  span2[1] = 'd';
   REQUIRE(buf.str() == "abcd");
 }
 
-TEST_CASE("FlexBuffer.reserve(size) views do not dangle") {
+TEST_CASE("FlexBuffer.reserve(size) spans do not dangle") {
   FlexBuffer buf;
-  auto view1 = buf.reserve(2);
-  auto view2 = buf.reserve(2);
+  auto span1 = buf.reserve(2);
+  auto span2 = buf.reserve(2);
   buf.resize(100);
   buf[0] = '1';
   buf[1] = '2';
   buf[2] = '3';
   buf[3] = '4';
-  REQUIRE(view1.str() == "12");
-  REQUIRE(view2.str() == "34");
+  REQUIRE(span1.str() == "12");
+  REQUIRE(span2.str() == "34");
 }
 
 TEST_CASE("FlexBuffer << string") {
@@ -512,9 +500,9 @@ TEST_CASE("FlexBuffer << string") {
   REQUIRE(buf.str() == "hello world!");
 }
 
-TEST_CASE("FlexBuffer << BufferView") {
+TEST_CASE("FlexBuffer << BufferSpan") {
   std::string str{"hello world!"};
-  auto src = BufferView::wrap(str);
+  auto src = BufferSpan::wrap(str);
   FlexBuffer dest;
   dest << src;
   dest << " ";
@@ -556,13 +544,13 @@ TEST_CASE("BufferWriter and BufferReader") {
   BufferReader reader{buf};
   REQUIRE(reader.remaining() == 12);
   auto peek = reader.peek(6);
-  auto view1 = reader.next(6);
+  auto span1 = reader.next(6);
   REQUIRE(reader.remaining() == 6);
-  auto view2 = reader.next(6);
+  auto span2 = reader.next(6);
   REQUIRE(reader.remaining() == 0);
   REQUIRE(peek.str() == "hello ");
-  REQUIRE(view1.str() == "hello ");
-  REQUIRE(view2.str() == "world!");
+  REQUIRE(span1.str() == "hello ");
+  REQUIRE(span2.str() == "world!");
   REQUIRE_THROWS(reader.next(1), "array index out of bounds");
   REQUIRE(reader.remaining() == 0);
 }
