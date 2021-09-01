@@ -9,7 +9,8 @@ Bazel users can utilize `//:flexbuf` from the root `BUILD` file.
 
 ## Class Overview
 * `BufferView` - A const-only, fixed-length buffer that wraps existing memory. Pass-by-value continues to point to the same underlying memory.
-* `Buffer` - A mutable, fixed-length buffer that can either allocate memory or wrap existing memory. Pass-by-value will deep copy. Extends `BufferView`.
+* `BufferSpan` - A mutable, fixed-length buffer that wraps existing memory. Pass-by-value continues to point to the same underlying memory. Extends `BufferView`.
+* `Buffer` - A mutable, fixed-length buffer that allocates memory. Pass-by-value will deep copy. Extends `BufferSpan`.
 * `FlexBuffer` - A mutable, growable buffer that always allocates. Pass-by-value will deep copy. Extends `Buffer`.
 * `BufferReader` - Wraps a `BufferView` to provide linear reads.
 * `BufferWriter` - Wraps a `Buffer` to provide linear writes.
@@ -115,27 +116,21 @@ Output:
 ```
 
 
-## Buffer
-* A mutable, fixed-length buffer that can either allocate memory or wrap existing memory. 
-* Pass-by-value will deep copy. 
+## BufferSpan
+* A mutable, fixed-length buffer that wraps existing memory.
+* Pass-by-value continues to point to the same underlying memory.
 * Extends `BufferView`.
 
 
-### Buffer Usage
+### BufferSpan Usage
 Factory Functions:
 * `static Buffer wrap(char* data, size_t offset, size_t size)` - Wrap the given raw pointer at the given offset/size.
 * `static Buffer wrap(std::shared_ptr<char[]> data, size_t offset, size_t size)` - Wrap the given shared_ptr buffer at the given offset/size.
-* `static Buffer copy_of(const char* data, size_t offset, size_t size)` - Allocate a new Buffer and copy the contents of the given data into it.
-* `static Buffer copy_of(const std::string_view& string)` - Allocate a new Buffer and copy the contents of the given string_view into it.
-* `static Buffer copy_of(const BufferView& buffer_view)` - Allocate a new Buffer and copy the contents of the given BufferView into it.
-* `static Buffer copy_of(const span<T>& span)` - Allocate a new Buffer and copy the contents of the given span of a fundamental type into it.
 
 Member Functions:
 * `void clear()` - Fill the data with 0's
-* `Buffer copy(size_t index = 0, size_t size = Buffer::npos)` - Allocate a new Buffer consisting of the contents of this buffer for the given range.
-* `char* data()` - Get the raw pointer to the start of the wrapped data.
 * `size_t size()` - Get the buffer size.
-* `Buffer subspan(size_t index = 0, size_t size = Buffer::npos)` - Get a mutable buffer that wraps the same underlying data for the given range.
+* `BufferSpan subspan(size_t index = 0, size_t size = Buffer::npos)` - Get a mutable buffer that wraps the same underlying data for the given range.
 * `BufferView subview(size_t index = 0, size_t size = BufferView::npos)` - Get a sub-view of this buffer.
 * `void write<T>(const T& src, size_t index = 0)` - Write any trivially copyable type to the given index.
 * `void write<T>(const std::span<T>& src, size_t index = 0)` - Write a span of any trivially copyable type to the given index.
@@ -146,38 +141,28 @@ Member Operators:
 Stringification Functions:
 * `std::string Buffer::str()` - Convert the contents to a std::string
 * `std::string Buffer::hex()` - Convert the contents to a hex string
-* `std::ostream& operator<<(std::ostream& os, const flexbuf::Buffer& view)` - Convert the content to hex and append to the `ostream`
+* `std::ostream& operator<<(std::ostream& os, const flexbuf::BufferSpan& view)` - Convert the content to hex and append to the `ostream`
 
-### Buffer Memory Wrapping
+### BufferSpan Memory Wrapping
 To wrap a raw pointer, use the factory method: `Buffer Buffer::wrap(char* ptr, size_t offset, size_t length)`
 To wrap a shared pointer, use the factory method: `Buffer Buffer::wrap(std::shared_ptr<char[]> ptr, size_t offset, size_t length)`
 
 
-### Buffer Memory Allocation
-To allocate a `Buffer` of a specific size, use the factory method: `Buffer::allocate(size_t size)`
+### BufferSpan Data Read Access
+`BufferSpan` extends `BufferView` to provide the same read patterns.
 
 
-### Buffer Memory Copying
-To copy data into a new `Buffer`, use the factory methods:
-* `Buffer Buffer::copy_of(const char* data, size_t offset, size_t size)`
-* `Buffer Buffer::copy_of(const BufferView& view)`
+### BufferSpan Data Write Access
+`BufferSpan` provides `char* data()` and `char& operator[](size_t index)` to mutate the underlying data
 
 
-### Buffer Data Read Access
-`Buffer` extends `BufferView` to provide the same read patterns.
-
-
-### Buffer Data Write Access
-`Buffer` provides `char* data()` and `char& operator[](size_t index)` to mutate the underlying data
-
-
-### Buffer Child Span
-`Buffer` extends `BufferView` to provide `const` child views.
-Additionally, `Buffer` provides `span` methods that return a mutable child `Buffer` object that wraps a portion of the underlying memory.
+### BufferSpan Child Span
+`BufferSpan` extends `BufferView` to provide `const` child views.
+Additionally, `BufferSpan` provides `span` methods that return a mutable child `Buffer` object that wraps a portion of the underlying memory.
 Example:
 ```
 std::string str{"hello world!"};
-auto buf = Buffer::copy_of(str);
+auto buf = BufferSpan::wrap(str.data(), 0, str.length());
 auto span1 = buf.subspan(0, 6); // span from index 0 of size 6
 auto span2 = buf.subspan(6); // span from index 6 to end of buffer
 span1[0] = 'H';
@@ -194,7 +179,7 @@ Note: Parent and child views use a `shared_ptr` to manage underlying buffer owne
 ### Writing Fundamental Types
 Example:
 ```
-auto buf = Buffer::allocate(4);
+auto buf = BufferSpan::wrap(...);
 buf.write<uint32_t>(12345, 0);
 std::cout << buf.read<uint32_t>(0) << std::endl;
 ```
@@ -202,6 +187,34 @@ Output:
 ```
 12345
 ```
+
+
+## Buffer
+* A mutable, fixed-length buffer that allocates memory.
+* Pass-by-value will deep copy. 
+* Extends `BufferSpan`.
+
+
+### Buffer Usage
+Factory Functions:
+* `static Buffer copy_of(const char* data, size_t offset, size_t size)` - Allocate a new Buffer and copy the contents of the given data into it.
+* `static Buffer copy_of(const std::string_view& string)` - Allocate a new Buffer and copy the contents of the given string_view into it.
+* `static Buffer copy_of(const BufferView& buffer_view)` - Allocate a new Buffer and copy the contents of the given BufferView into it.
+* `static Buffer copy_of(const span<T>& span)` - Allocate a new Buffer and copy the contents of the given span of a fundamental type into it.
+
+
+### Buffer Memory Allocation
+To allocate a `Buffer` of a specific size, use the factory method: `Buffer::allocate(size_t size)`
+
+
+### Buffer Memory Copying
+To copy data into a new `Buffer`, use the factory methods:
+* `Buffer Buffer::copy_of(const char* data, size_t offset, size_t size)`
+* `Buffer Buffer::copy_of(const BufferView& view)`
+
+
+### Buffer Data Access
+`Buffer` extends `BufferSpan` to provide the same member functions.
 
 
 ## FlexBuffer
@@ -223,10 +236,10 @@ Member Functions:
 * `char* data()` - Get the raw pointer to the start of the wrapped data.
 * `FlexBuffer flex_copy(size_t index = 0, size_t size = FlexBuffer::npos)` - Allocate a new FlexBuffer consisting of the contents of this buffer for the given range.
 * `size_t initial_capacity()` - Get the initial capacity. The underlying memory will never reallocate smaller than this size.
-* `Buffer reserve(size_t size)` - Increment the total size by the given size, and return a writable Buffer that wraps this new memory.
+* `BufferSpan reserve(size_t size)` - Increment the total size by the given size, and return a writable BufferSpan that wraps this new memory.
 * `void resize(size_t size, ResizeMode mode = ResizeMode::KeepData)` - Set the current size, and grow or shrink the underlying memory by factors of two as necessary.
 * `size_t size()` - Get the buffer size.
-* `Buffer subspan(size_t index = 0, size_t size = Buffer::npos)` - Get a mutable buffer that wraps the same underlying data for the given range.
+* `BufferSpan subspan(size_t index = 0, size_t size = Buffer::npos)` - Get a mutable buffer that wraps the same underlying data for the given range.
 * `BufferView subview(size_t index = 0, size_t size = BufferView::npos)` - Get a sub-view of this buffer.
 
 Member Operators:
@@ -342,8 +355,8 @@ Constructor:
 * `BufferWriter(Buffer& buffer)`
 
 Member Functions:
-* `Buffer next(size_t size)` - Get a wrapped Buffer of the next `size` elements and advance the `position`
-* `Buffer peek(size_t size)` - Get a wrapped Buffer of the next `size` elements without advancing the `position`
+* `BufferSpan next(size_t size)` - Get a wrapped Buffer of the next `size` elements and advance the `position`
+* `BufferSpan peek(size_t size)` - Get a wrapped Buffer of the next `size` elements without advancing the `position`
 * `size_t position()` - Get the current position
 * `void position(size_t position)` - Set the current position
 * `size_t remaining()` - Get the remaining bytes that can be written (`buffer.size() - position()`)

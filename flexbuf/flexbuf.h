@@ -78,6 +78,7 @@ public:
  */
 class BufferView {
 private:
+  friend class BufferSpan;
   friend class Buffer;
   friend class FlexBuffer;
 
@@ -199,10 +200,6 @@ public:
    * Shallow copy
    */
   BufferView(const BufferView& rhs) = default;
-
-  /**
-   * Shallow copy
-   */
   BufferView& operator=(const BufferView&) = default;
 
   /**
@@ -314,38 +311,163 @@ public:
 };
 
 /**
- * A fixed-size buffer that can either allocate memory or wrap existing memory.
- * Pass-by-value semantics will deep copy the underlying data - O(n).
+ * A fixed-size buffer that wraps existing memory.
+ * Pass-by-value semantics will point at the same underlying memory - O(1).
  * The default constructor wraps a nullptr and has a size of 0.
- * Static factory methods are used for differentiating wrap, allocation, and copy semantics.
+ * Static factory methods are used for allocation and copy semantics.
  * This class extends BufferView.
  */
-class Buffer : public BufferView {
+class BufferSpan : public BufferView {
 private:
+  friend class Buffer;
   friend class FlexBuffer;
 
-  Buffer(BufferDataPtr& data, size_t offset, size_t size) : BufferView{data, offset, size} {};
-  Buffer(BufferDataPtr&& data, size_t offset, size_t size) : BufferView{data, offset, size} {};
+  BufferSpan(BufferDataPtr& data, size_t offset, size_t size) : BufferView{data, offset, size} {};
+  BufferSpan(BufferDataPtr&& data, size_t offset, size_t size) : BufferView{data, offset, size} {};
 
 public:
-  static Buffer allocate(size_t size) {
-    return Buffer{std::make_shared<BufferData>(size), 0, size};
-  }
-
   /**
    * Wrap the given raw pointer at the given offset/size.
    * Beware ownership: you must ensure the raw pointer remains valid.
    * Consider wrap(std::shared_ptr<char[]> data, size_t offset, size_t size) for safety if possible.
    */
-  static Buffer wrap(char* data, size_t offset, size_t size) {
-    return Buffer{std::make_shared<BufferData>(data, offset, size), 0, size};
+  static BufferSpan wrap(char* data, size_t offset, size_t size) {
+    return BufferSpan{std::make_shared<BufferData>(data, offset, size), 0, size};
   }
 
   /**
    * Wrap the given shared_ptr buffer at the given offset/size.
    */
-  static Buffer wrap(std::shared_ptr<char[]> data, size_t offset, size_t size) {
-    return Buffer{std::make_shared<BufferData>(data, offset, size), 0, size};
+  static BufferSpan wrap(std::shared_ptr<char[]> data, size_t offset, size_t size) {
+    return BufferSpan{std::make_shared<BufferData>(data, offset, size), 0, size};
+  }
+
+  /**
+   * Create a buffer span with size=0 and set underlying data to nullptr
+   */
+  BufferSpan() : BufferView{} {};
+
+  /**
+   * Shallow copy
+   */
+  BufferSpan(const BufferSpan& rhs) = default;
+  BufferSpan& operator=(const BufferSpan& rhs) = default;
+
+  BufferSpan(BufferSpan&& rhs) = default;
+  BufferSpan& operator=(BufferSpan&& rhs) = default;
+  ~BufferSpan() = default;
+
+  /**
+   * Get the raw pointer to the start of the underlying data.
+   */
+  inline char* data() {
+    check_bounds(0, 0);
+    return raw_data();
+  }
+
+  /**
+   * Get the raw pointer to the start of the underlying data.
+   */
+  inline const char* data() const {
+    return const_cast<BufferSpan&>(*this).data();
+  }
+
+  /**
+   * Get the byte at the given index.
+   * Throws on array index out of bounds.
+   */
+  char& operator[](size_t index) {
+    check_bounds(index, 1);
+    return raw_data()[index];
+  }
+
+  /**
+   * Get the byte at the given index.
+   * Throws on array index out of bounds.
+   */
+  const char& operator[](size_t index) const {
+    return const_cast<BufferSpan&>(*this)[index];
+  }
+
+  /**
+   * Convert this BufferSpan to a std::span
+   */
+  operator std::span<char>() {
+    check_bounds(0, size());
+    return std::span{raw_data(), size()};
+  }
+
+  /**
+   * Convert this BufferSpan to a std::span
+   */
+  operator std::span<const char>() const {
+    check_bounds(0, size());
+    return std::span{raw_data(), size()};
+  }
+
+  /**
+   * Write any trivially copyable type to the given index.
+   */
+  template <typename T, typename = std::enable_if_t<std::is_trivially_copyable_v<T>>>
+  void write(const T& src, size_t index = 0) {
+    check_bounds(index, sizeof(T));
+    memcpy(reinterpret_cast<char*>(raw_data() + index), &src, sizeof(T));
+  }
+
+  /**
+   * Write a span of any trivially copyable type to the given index.
+   */
+  template <typename T, typename = std::enable_if_t<std::is_trivially_copyable_v<T>>>
+  void write(const std::span<T>& src, size_t index = 0) {
+    check_bounds(index, sizeof(T) * src.size());
+    memcpy(reinterpret_cast<char*>(raw_data() + index), src.data(), sizeof(T) * src.size());
+  }
+
+  /**
+   * Get a mutable buffer span that wraps the same underlying data for the given range.
+   * The returned buffer span may outlive the source buffer span.
+   */
+  BufferSpan subspan(size_t index = 0, size_t size = BufferSpan::npos) {
+    if (size == BufferSpan::npos)
+      size = _size - index;
+    check_bounds(index, size);
+    return BufferSpan{_data, _offset + index, size};
+  }
+
+  /**
+   * Get a const buffer span that wraps the same underlying data for the given range.
+   * The returned buffer span may outlive the source buffer span.
+   */
+  const BufferSpan subspan(size_t index = 0, size_t size = BufferSpan::npos) const {
+    return const_cast<BufferSpan&>(*this).subspan(index, size);
+  }
+
+  /**
+   * Fill the data with 0's
+   */
+  void clear() {
+    check_bounds(0, _size);
+    memset(raw_data(), 0, _size);
+  }
+};
+
+/**
+ * A fixed-size buffer that allocates memory.
+ * Pass-by-value semantics will deep copy the underlying data - O(n).
+ * The default constructor wraps a nullptr and has a size of 0.
+ * Static factory methods are used for differentiating wrap, allocation, and copy semantics.
+ * This class extends BufferSpan.
+ */
+class Buffer : public BufferSpan {
+private:
+  friend class FlexBuffer;
+
+  Buffer(BufferDataPtr& data, size_t offset, size_t size) : BufferSpan{data, offset, size} {};
+  Buffer(BufferDataPtr&& data, size_t offset, size_t size) : BufferSpan{data, offset, size} {};
+
+public:
+  static Buffer allocate(size_t size) {
+    return Buffer{std::make_shared<BufferData>(size), 0, size};
   }
 
   /**
@@ -375,7 +497,7 @@ public:
    * Allocate a new Buffer and copy the contents of the given span into it.
    */
   template <typename T, typename = typename std::enable_if_t<std::is_fundamental_v<T>>>
-  static BufferView copy_of(const std::span<const T>& span) {
+  static Buffer copy_of(const std::span<const T>& span) {
     auto data = const_cast<char*>(reinterpret_cast<const char*>(span.data()));
     auto size = span.size() * sizeof(T);
     return copy_of(data, 0, size);
@@ -385,7 +507,7 @@ public:
    * Allocate a new Buffer and copy the contents of the given span into it.
    */
   template <typename T, typename = typename std::enable_if_t<std::is_fundamental_v<T>>>
-  static BufferView copy_of(const std::span<T>& span) {
+  static Buffer copy_of(const std::span<T>& span) {
     auto data = reinterpret_cast<char*>(span.data());
     size_t size = span.size() * sizeof(T);
     return copy_of(data, 0, size);
@@ -395,7 +517,7 @@ public:
    * Allocate a new Buffer and copy the contents of the given span into it.
    */
   template <typename T, size_t N, typename = typename std::enable_if_t<std::is_fundamental_v<T>>>
-  static BufferView copy_of(const std::span<const T, N>& span) {
+  static Buffer copy_of(const std::span<const T, N>& span) {
     auto data = reinterpret_cast<const char*>(span.data());
     size_t size = span.size() * sizeof(T);
     return copy_of(data, 0, size);
@@ -405,7 +527,7 @@ public:
    * Allocate a new Buffer and copy the contents of the given span into it.
    */
   template <typename T, size_t N, typename = typename std::enable_if_t<std::is_fundamental_v<T>>>
-  static BufferView copy_of(const std::span<T, N>& span) {
+  static Buffer copy_of(const std::span<T, N>& span) {
     auto data = reinterpret_cast<char*>(span.data());
     size_t size = span.size() * sizeof(T);
     return copy_of(data, 0, size);
@@ -421,12 +543,12 @@ public:
   /**
    * Create a buffer with size=0 and set underlying data to nullptr
    */
-  Buffer() : BufferView{} {};
+  Buffer() : BufferSpan{} {};
 
   /**
    * Deep copy
    */
-  Buffer(const Buffer& rhs) : BufferView{std::make_shared<BufferData>(rhs.size()), 0, rhs.size()} {
+  Buffer(const Buffer& rhs) : BufferSpan{std::make_shared<BufferData>(rhs.size()), 0, rhs.size()} {
     memcpy(raw_data(), rhs.raw_data(), rhs.size());
   }
 
@@ -444,94 +566,6 @@ public:
   Buffer& operator=(Buffer&& rhs) = default;
   ~Buffer() = default;
 
-  /**
-   * Get the raw pointer to the start of the underlying data.
-   */
-  inline char* data() {
-    check_bounds(0, 0);
-    return raw_data();
-  }
-
-  /**
-   * Get the raw pointer to the start of the underlying data.
-   */
-  inline const char* data() const {
-    return const_cast<Buffer&>(*this).data();
-  }
-
-  /**
-   * Get the byte at the given index.
-   * Throws on array index out of bounds.
-   */
-  char& operator[](size_t index) {
-    check_bounds(index, 1);
-    return raw_data()[index];
-  }
-
-  /**
-   * Get the byte at the given index.
-   * Throws on array index out of bounds.
-   */
-  const char& operator[](size_t index) const {
-    return const_cast<Buffer&>(*this)[index];
-  }
-
-  /**
-   * Convert this Buffer to a std::span
-   */
-  operator std::span<char>() {
-    check_bounds(0, size());
-    return std::span{raw_data(), size()};
-  }
-
-  /**
-   * Convert this Buffer to a std::span
-   */
-  operator std::span<const char>() const {
-    check_bounds(0, size());
-    return std::span{raw_data(), size()};
-  }
-
-  /**
-   * Write any trivially copyable type to the given index.
-   */
-  template <typename T, typename = std::enable_if_t<std::is_trivially_copyable_v<T>>>
-  void write(const T& src, size_t index = 0) {
-    check_bounds(index, sizeof(T));
-    memcpy(reinterpret_cast<char*>(raw_data() + index), &src, sizeof(T));
-  }
-
-  /**
-   * Write a span of any trivially copyable type to the given index.
-   */
-  template <typename T, typename = std::enable_if_t<std::is_trivially_copyable_v<T>>>
-  void write(const std::span<T>& src, size_t index = 0) {
-    check_bounds(index, sizeof(T) * src.size());
-    memcpy(reinterpret_cast<char*>(raw_data() + index), src.data(), sizeof(T) * src.size());
-  }
-
-  /**
-   * Get a mutable buffer that wraps the same underlying data for the given range.
-   * The returned buffer may outlive the source buffer.
-   */
-  Buffer subspan(size_t index = 0, size_t size = Buffer::npos) {
-    if (size == Buffer::npos)
-      size = _size - index;
-    check_bounds(index, size);
-    return Buffer{_data, _offset + index, size};
-  }
-
-  /**
-   * Get a const buffer that wraps the same underlying data for the given range.
-   * The returned buffer may outlive the source buffer.
-   */
-  const Buffer subspan(size_t index = 0, size_t size = Buffer::npos) const {
-    return const_cast<Buffer&>(*this).subspan(index, size);
-  }
-
-  /**
-   * Allocate a new Buffer consisting of the contents of this buffer for the given range.
-   */
   Buffer copy(size_t index = 0, size_t size = Buffer::npos) const {
     if (size == Buffer::npos)
       size = _size - index;
@@ -539,14 +573,6 @@ public:
     auto result = Buffer::allocate(size);
     memcpy(result.raw_data(), reinterpret_cast<const char*>(raw_data() + index), size);
     return result;
-  }
-
-  /**
-   * Fill the data with 0's
-   */
-  void clear() {
-    check_bounds(0, _size);
-    memset(raw_data(), 0, _size);
   }
 };
 
@@ -674,12 +700,12 @@ public:
   }
 
   /**
-   * Increment the total size by the given size, and return a writable Buffer that wraps this new memory.
+   * Increment the total size by the given size, and return a writable BufferSpan that wraps this new memory.
    */
-  inline Buffer reserve(size_t size) noexcept {
+  inline BufferSpan reserve(size_t size) noexcept {
     auto offset = _size;
     resize(_size + size);
-    return Buffer{_data, offset, size};
+    return BufferSpan{_data, offset, size};
   }
 
   /**
@@ -827,7 +853,7 @@ public:
    * Get a span of the next "size" bytes of the underlying Buffer from the current position.
    * After creating the span, this Reader's position remains unchanged.
    */
-  Buffer peek(size_t size) {
+  BufferSpan peek(size_t size) {
     return _buf.subspan(_position, size);
   }
 
@@ -835,8 +861,8 @@ public:
    * Get a span of the next "size" bytes of the underlying Bufer from the current position.
    * After creating the span, this Reader's position is advanced by the size.
    */
-  Buffer next(size_t size) {
-    Buffer result = _buf.subspan(_position, size);
+  BufferSpan next(size_t size) {
+    BufferSpan result = _buf.subspan(_position, size);
     _position += size;
     return result;
   }
