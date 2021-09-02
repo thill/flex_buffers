@@ -4,165 +4,6 @@
 
 using namespace flexbuf;
 
-TEST_CASE("BufferSpan::wrap(shared_ptr<char[]>)") {
-  std::shared_ptr<char[]> src{new char[5]};
-  src[0] = 'a';
-  src[1] = 'b';
-  src[2] = 'c';
-  src[3] = 'd';
-  src[4] = 'e';
-  auto buf = BufferSpan::wrap(src, 1, 3);
-  REQUIRE(src.use_count() == 2);
-  REQUIRE(buf.str() == "bcd");
-}
-
-TEST_CASE("BufferSpan::wrap(span<uint16_t>)") {
-  std::shared_ptr<uint16_t[]> arr{new uint16_t[2]};
-  arr.get()[0] = 257;
-  arr.get()[1] = 258;
-  std::span<uint16_t> src{arr.get(), 2};
-  auto buf = BufferSpan::wrap(src);
-  REQUIRE(buf.size() == 4);
-  REQUIRE(buf[0] + buf[1] == 2);
-  REQUIRE(buf[2] + buf[3] == 3);
-}
-
-TEST_CASE("BufferSpan::wrap(span<const uint16_t, size>)") {
-  std::shared_ptr<uint16_t[]> arr{new uint16_t[2]};
-  arr.get()[0] = 257;
-  arr.get()[1] = 258;
-  std::span<const uint16_t, 2> src{arr.get(), 2};
-  auto buf = BufferSpan::wrap(src);
-  REQUIRE(buf.size() == 4);
-  REQUIRE(buf[0] + buf[1] == 2);
-  REQUIRE(buf[2] + buf[3] == 3);
-}
-
-TEST_CASE("BufferSpan(const BufferSpan&) shallow") {
-  std::string str{"hello world!"};
-  auto src = Buffer::copy_of(str);
-  BufferSpan buf = src.subspan();
-  BufferSpan copy{buf};
-  src[0] = 'H';
-  src[6] = 'W';
-  REQUIRE(src.str() == "Hello World!");
-  REQUIRE(buf.str() == "Hello World!");
-  REQUIRE(copy.str() == "Hello World!");
-}
-
-TEST_CASE("BufferSpan operator=(const BufferSpan&) shallow") {
-  std::string str{"hello world!"};
-  auto src = Buffer::copy_of(str);
-  BufferSpan buf = src.subspan();
-  BufferSpan copy;
-  copy = buf;
-  src[0] = 'H';
-  src[6] = 'W';
-  REQUIRE(src.str() == "Hello World!");
-  REQUIRE(buf.str() == "Hello World!");
-  REQUIRE(copy.str() == "Hello World!");
-}
-
-TEST_CASE("BufferSpan.data() from wrapped raw pointer") {
-  std::string src{"hello world!"};
-  auto buf = BufferSpan::wrap(src);
-  REQUIRE(buf.data()[0] == 'h');
-  REQUIRE(buf.data()[2] == 'l');
-  REQUIRE(buf.data()[11] == '!');
-}
-
-TEST_CASE("BufferSpan.data() from wrapped shared pointer") {
-  std::shared_ptr<char[]> src{new char[3]};
-  src[0] = 'a';
-  src[1] = 'b';
-  src[2] = 'c';
-  auto buf = BufferSpan::wrap(src, 0, 3);
-  REQUIRE(src.use_count() == 2);
-  src = nullptr;
-  REQUIRE(buf.data()[0] == 'a');
-  REQUIRE(buf.data()[1] == 'b');
-  REQUIRE(buf.data()[2] == 'c');
-}
-
-TEST_CASE("BufferSpan.size()") {
-  std::string src{"hello world!"};
-  auto buf = BufferSpan::wrap(src);
-  REQUIRE(buf.size() == 12);
-}
-
-TEST_CASE("BufferSpan.operator[]") {
-  char* src = new char[3];
-  src[0] = 'a';
-  src[1] = 'b';
-  src[2] = 'c';
-  auto buf = BufferSpan::wrap(src, 0, 3);
-  REQUIRE(buf[0] == 'a');
-  REQUIRE(buf[1] == 'b');
-  REQUIRE(buf[2] == 'c');
-  delete[] src;
-}
-
-TEST_CASE("BufferSpan to std::span") {
-  std::string src{"hello world!"};
-  auto buf = BufferSpan::wrap(src);
-  std::span<const char> span = buf;
-  REQUIRE(span.size() == src.size());
-  REQUIRE(span[0] == 'h');
-  REQUIRE(span[1] == 'e');
-  REQUIRE(span[2] == 'l');
-}
-
-TEST_CASE("BufferSpan.read<>()") {
-  char* src = new char[3];
-  src[0] = 255;
-  src[1] = 1;
-  src[2] = 1;
-  auto buf = BufferSpan::wrap(src, 0, 3);
-  REQUIRE(buf.read<uint16_t>(1) == static_cast<uint16_t>(257));
-}
-
-TEST_CASE("BufferSpan.subspan()") {
-  std::string src{"hello world!"};
-  auto buf = BufferSpan::wrap(src);
-  auto span = buf.subspan(6);
-  REQUIRE(span.str() == "world!");
-}
-
-TEST_CASE("BufferSpan.subspan() does not dangle") {
-  std::string src{"hello world!"};
-  auto buf = std::make_shared<BufferSpan>(BufferSpan::wrap(src));
-  auto span = buf->subspan(6);
-  buf.reset();
-  REQUIRE(span.str() == "world!");
-}
-
-TEST_CASE("BufferSpan.hex()") {
-  std::shared_ptr<char[]> src{new char[4]};
-  src[0] = 1;
-  src[1] = 7;
-  src[2] = 10;
-  src[3] = 33;
-  auto span = BufferSpan::wrap(src, 0, 4);
-  REQUIRE(span.hex() == "0x01070a21");
-  std::ostringstream oss;
-  oss << Buffer::copy_of(span);
-  REQUIRE(oss.str() == "0x01070a21");
-}
-
-TEST_CASE("BufferSpan.subspan() of subspan") {
-  std::shared_ptr<char[]> src{new char[4]};
-  src[0] = 1;
-  src[1] = 7;
-  src[2] = 10;
-  src[3] = 33;
-  auto span = BufferSpan::wrap(src, 0, 4);
-  auto subspan1 = span.subspan(1, 2);
-  auto subspan2 = subspan1.subspan(1, 1);
-  REQUIRE(subspan1[0] == 7);
-  REQUIRE(subspan1[1] == 10);
-  REQUIRE(subspan2[0] == 10);
-}
-
 TEST_CASE("Buffer::wrap(shared_ptr<char[]>)") {
   std::shared_ptr<char[]> src{new char[5]};
   src[0] = 'a';
@@ -182,6 +23,124 @@ TEST_CASE("Buffer::wrap(shared_ptr<char[]>)") {
   REQUIRE(src[2] == '2');
   REQUIRE(src[3] == '3');
   REQUIRE(src[4] == 'e');
+}
+
+TEST_CASE("Buffer::wrap(span<uint16_t>)") {
+  std::shared_ptr<uint16_t[]> arr{new uint16_t[2]};
+  arr.get()[0] = 257;
+  arr.get()[1] = 258;
+  std::span<uint16_t> src{arr.get(), 2};
+  auto buf = Buffer::wrap(src);
+  REQUIRE(buf.size() == 4);
+  REQUIRE(buf[0] + buf[1] == 2);
+  REQUIRE(buf[2] + buf[3] == 3);
+}
+
+TEST_CASE("Buffer::wrap(span<const uint16_t, size>)") {
+  std::shared_ptr<uint16_t[]> arr{new uint16_t[2]};
+  arr.get()[0] = 257;
+  arr.get()[1] = 258;
+  std::span<const uint16_t, 2> src{arr.get(), 2};
+  auto buf = Buffer::wrap(src);
+  REQUIRE(buf.size() == 4);
+  REQUIRE(buf[0] + buf[1] == 2);
+  REQUIRE(buf[2] + buf[3] == 3);
+}
+
+TEST_CASE("Buffer.data() from wrapped raw pointer") {
+  std::string src{"hello world!"};
+  auto buf = Buffer::wrap(src);
+  REQUIRE(buf.data()[0] == 'h');
+  REQUIRE(buf.data()[2] == 'l');
+  REQUIRE(buf.data()[11] == '!');
+}
+
+TEST_CASE("Buffer.data() from wrapped shared pointer") {
+  std::shared_ptr<char[]> src{new char[3]};
+  src[0] = 'a';
+  src[1] = 'b';
+  src[2] = 'c';
+  auto buf = Buffer::wrap(src, 0, 3);
+  REQUIRE(src.use_count() == 2);
+  REQUIRE(buf.data()[0] == 'a');
+  REQUIRE(buf.data()[1] == 'b');
+  REQUIRE(buf.data()[2] == 'c');
+  buf.data()[0] = '1';
+  buf.data()[1] = '2';
+  buf.data()[2] = '3';
+  // wrapped original source changed
+  REQUIRE(src[0] == '1');
+  REQUIRE(src[1] == '2');
+  REQUIRE(src[2] == '3');
+}
+
+TEST_CASE("Buffer.size()") {
+  std::string src{"hello world!"};
+  auto buf = Buffer::wrap(src);
+  REQUIRE(buf.size() == 12);
+}
+
+TEST_CASE("Buffer.operator[]") {
+  char* src = new char[3];
+  src[0] = 'a';
+  src[1] = 'b';
+  src[2] = 'c';
+  auto buf = Buffer::wrap(src, 0, 3);
+  REQUIRE(buf[0] == 'a');
+  REQUIRE(buf[1] == 'b');
+  REQUIRE(buf[2] == 'c');
+  delete[] src;
+}
+
+TEST_CASE("Buffer.read<>()") {
+  char* src = new char[3];
+  src[0] = 255;
+  src[1] = 1;
+  src[2] = 1;
+  auto buf = Buffer::wrap(src, 0, 3);
+  REQUIRE(buf.read<uint16_t>(1) == static_cast<uint16_t>(257));
+}
+
+TEST_CASE("Buffer.span()") {
+  std::string src{"hello world!"};
+  auto buf = Buffer::wrap(src);
+  auto span = buf.span(6);
+  REQUIRE(span.str() == "world!");
+}
+
+TEST_CASE("Buffer.span() does not dangle") {
+  std::string src{"hello world!"};
+  auto buf = std::make_shared<Buffer>(Buffer::wrap(src));
+  auto span = buf->span(6);
+  buf.reset();
+  REQUIRE(span.str() == "world!");
+}
+
+TEST_CASE("Buffer.hex()") {
+  std::shared_ptr<char[]> src{new char[4]};
+  src[0] = 1;
+  src[1] = 7;
+  src[2] = 10;
+  src[3] = 33;
+  auto span = Buffer::wrap(src, 0, 4);
+  REQUIRE(span.hex() == "0x01070a21");
+  std::ostringstream oss;
+  oss << Buffer::copy_of(span);
+  REQUIRE(oss.str() == "0x01070a21");
+}
+
+TEST_CASE("Buffer.span() of span") {
+  std::shared_ptr<char[]> src{new char[4]};
+  src[0] = 1;
+  src[1] = 7;
+  src[2] = 10;
+  src[3] = 33;
+  auto span = Buffer::wrap(src, 0, 4);
+  auto span1 = span.span(1, 2);
+  auto span2 = span1.span(1, 1);
+  REQUIRE(span1[0] == 7);
+  REQUIRE(span1[1] == 10);
+  REQUIRE(span2[0] == 10);
 }
 
 TEST_CASE("Buffer(const Buffer& buffer)") {
@@ -230,25 +189,6 @@ TEST_CASE("Buffer.data() from copy") {
   REQUIRE(src[2] == 'c');
 }
 
-TEST_CASE("Buffer.data() from wrapped shared pointer") {
-  std::shared_ptr<char[]> src{new char[3]};
-  src[0] = 'a';
-  src[1] = 'b';
-  src[2] = 'c';
-  auto buf = Buffer::wrap(src, 0, 3);
-  REQUIRE(src.use_count() == 2);
-  REQUIRE(buf.data()[0] == 'a');
-  REQUIRE(buf.data()[1] == 'b');
-  REQUIRE(buf.data()[2] == 'c');
-  buf.data()[0] = '1';
-  buf.data()[1] = '2';
-  buf.data()[2] = '3';
-  // wrapped original source changed
-  REQUIRE(src[0] == '1');
-  REQUIRE(src[1] == '2');
-  REQUIRE(src[2] == '3');
-}
-
 TEST_CASE("Buffer.operator[](index)") {
   std::string src{"hello world!"};
   auto buf = Buffer::copy_of(src);
@@ -284,13 +224,13 @@ TEST_CASE("Buffer to std::span const") {
   REQUIRE(span[2] == 'c');
 }
 
-TEST_CASE("BufferSpan.write<>(value)") {
+TEST_CASE("Buffer.write<>(value)") {
   auto buf = Buffer::allocate(4);
   buf.write<uint32_t>(12345, 0);
   REQUIRE(buf.read<uint32_t>(0) == 12345);
 }
 
-TEST_CASE("BufferSpan.write<>(span)") {
+TEST_CASE("Buffer.write<>(span)") {
   auto buf = Buffer::allocate(8);
   std::vector<uint32_t> vec;
   vec.push_back(12345);
@@ -301,11 +241,11 @@ TEST_CASE("BufferSpan.write<>(span)") {
   REQUIRE(buf.read<uint32_t>(4) == 67890);
 }
 
-TEST_CASE("Buffer.subspan() shallow") {
+TEST_CASE("Buffer.span() shallow") {
   std::string str{"hello world!"};
   auto buf = Buffer::copy_of(str);
-  auto span1 = buf.subspan();
-  auto span2 = buf.subspan(6);
+  auto span1 = buf.span();
+  auto span2 = buf.span(6);
   buf[0] = 'H';
   REQUIRE(buf.str() == "Hello world!");
   REQUIRE(span1.str() == "Hello world!");
@@ -370,10 +310,10 @@ TEST_CASE("FlexBuffer operator=(const FlexBuffer&) deep") {
   REQUIRE(copy.str() == "hello World!");
 }
 
-TEST_CASE("FlexBuffer.subspan() does not dangle") {
+TEST_CASE("FlexBuffer.span() does not dangle") {
   auto buf = std::make_shared<FlexBuffer>();
   *buf << "hello world!";
-  auto span = buf->subspan(6);
+  auto span = buf->span(6);
   buf.reset();
   REQUIRE(span.str() == "world!");
 }
@@ -458,7 +398,7 @@ TEST_CASE("FlexBuffer.resize(grow, KeepData)") {
   buf << "hello world!";
   buf.resize(100);
   REQUIRE(buf.size() == 100);
-  REQUIRE(buf.subspan(0, 12).str() == "hello world!");
+  REQUIRE(buf.span(0, 12).str() == "hello world!");
 }
 
 TEST_CASE("FlexBuffer.resize(grow, IgnoreData)") {
@@ -466,7 +406,7 @@ TEST_CASE("FlexBuffer.resize(grow, IgnoreData)") {
   buf << "hello world!";
   buf.resize(100, ResizeMode::IgnoreData);
   REQUIRE(buf.size() == 100);
-  REQUIRE(buf.subspan(0, 12).str() != "hello world!");
+  REQUIRE(buf.span(0, 12).str() != "hello world!");
 }
 
 TEST_CASE("FlexBuffer.reserve(size)") {
@@ -500,9 +440,9 @@ TEST_CASE("FlexBuffer << string") {
   REQUIRE(buf.str() == "hello world!");
 }
 
-TEST_CASE("FlexBuffer << BufferSpan") {
+TEST_CASE("FlexBuffer << Buffer") {
   std::string str{"hello world!"};
-  auto src = BufferSpan::wrap(str);
+  auto src = Buffer::wrap(str);
   FlexBuffer dest;
   dest << src;
   dest << " ";
