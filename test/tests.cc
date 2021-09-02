@@ -241,6 +241,18 @@ TEST_CASE("Buffer.write<>(span)") {
   REQUIRE(buf.read<uint32_t>(4) == 67890);
 }
 
+TEST_CASE("Buffer.ref<>()") {
+  auto buf = Buffer::allocate(8);
+  buf.write<uint32_t>(12345, 0);
+  buf.write<uint32_t>(67890, 4);
+  REQUIRE(buf.ref<uint32_t>(0) == 12345);
+  REQUIRE(buf.ref<uint32_t>(4) == 67890);
+  buf.ref<uint32_t>(0) = uint32_t{11111};
+  buf.ref<uint32_t>(4) = uint32_t{22222};
+  REQUIRE(buf.read<uint32_t>(0) == 11111);
+  REQUIRE(buf.read<uint32_t>(4) == 22222);
+}
+
 TEST_CASE("Buffer.span() shallow") {
   std::string str{"hello world!"};
   auto buf = Buffer::copy_of(str);

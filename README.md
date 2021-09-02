@@ -35,8 +35,9 @@ Member Functions:
 * `size_t size()` - Get the buffer size.
 * `char* data()` - Get the raw pointer to the start of the wrapped data.
 * `T read<T>(size_t index)` - Return a copy of any fundamental type from the given index.
-* `void write<T>(const T& src, size_t index = 0)` - Write any trivially copyable type to the given index.
-* `void write<T>(const std::span<T>& src, size_t index = 0)` - Write a span of any trivially copyable type to the given index.
+* `T& ref<T>(size_t index)` - Return a reference of any fundamental type that is backed by the buffer at the given index.
+* `void write<T>(const T& src, size_t index = 0)` - Write any fundamental copyable type to the given index.
+* `void write<T>(const std::span<T>& src, size_t index = 0)` - Write a span of any fundamental copyable type to the given index.
 * `void clear()` - Fill the data with 0's
 * `Buffer span(size_t index = 0, size_t size = Buffer::npos)` - Get a mutable buffer that wraps the same underlying data for the given range.
 

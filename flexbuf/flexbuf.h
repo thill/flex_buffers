@@ -371,18 +371,36 @@ public:
   }
 
   /**
-   * Write any trivially copyable type to the given index.
+   * Return a reference to any fundamental type from the given index which is backed by the array
    */
-  template <typename T, typename = std::enable_if_t<std::is_trivially_copyable_v<T>>>
+  template <typename T, typename = std::enable_if_t<std::is_fundamental_v<T>>>
+  const T& ref(size_t index) const {
+    check_bounds(index, sizeof(T));
+    return *reinterpret_cast<const T*>(reinterpret_cast<const char*>(raw_data() + index));
+  }
+
+  /**
+   * Return a reference to any fundamental type from the given index which is backed by the array
+   */
+  template <typename T, typename = std::enable_if_t<std::is_fundamental_v<T>>>
+  T& ref(size_t index) {
+    check_bounds(index, sizeof(T));
+    return *reinterpret_cast<T*>(reinterpret_cast<char*>(raw_data() + index));
+  }
+
+  /**
+   * Write any fundamental type to the given index.
+   */
+  template <typename T, typename = std::enable_if_t<std::is_fundamental_v<T>>>
   void write(const T& src, size_t index = 0) {
     check_bounds(index, sizeof(T));
     memcpy(reinterpret_cast<char*>(raw_data() + index), &src, sizeof(T));
   }
 
   /**
-   * Write a span of any trivially copyable type to the given index.
+   * Write a span of any fundamental type to the given index.
    */
-  template <typename T, typename = std::enable_if_t<std::is_trivially_copyable_v<T>>>
+  template <typename T, typename = std::enable_if_t<std::is_fundamental_v<T>>>
   void write(const std::span<T>& src, size_t index = 0) {
     check_bounds(index, sizeof(T) * src.size());
     memcpy(reinterpret_cast<char*>(raw_data() + index), src.data(), sizeof(T) * src.size());
