@@ -796,7 +796,7 @@ private:
 
 } // namespace flexbuf
 
-std::ostream& operator<<(std::ostream& os, const flexbuf::Buffer& span) {
+inline std::ostream& operator<<(std::ostream& os, const flexbuf::Buffer& span) {
   os << span.hex();
   return os;
 }
