@@ -407,6 +407,21 @@ public:
   }
 
   /**
+   * Write a buffer to the given index.
+   */
+  void write(const Buffer& src, size_t index = 0) {
+    check_bounds(index, src.size());
+    memcpy(reinterpret_cast<char*>(raw_data() + index), src.data(), src.size());
+  }
+
+  /**
+   * Write a buffer to the given index.
+   */
+  void write(const Buffer&& src, size_t index = 0) {
+    write(src, index);
+  }
+
+  /**
    * Get a mutable buffer span that wraps the same underlying data for the given range.
    * The returned buffer span may outlive the source buffer span.
    */
